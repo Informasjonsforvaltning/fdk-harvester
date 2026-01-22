@@ -1,0 +1,98 @@
+logging:
+  level.root: WARN
+  level.no: ${LOG_LEVEL:DEBUG}
+  level.no.fdk.fdk_harvester.kafka.ResourceEventProducer: DEBUG
+  level.org.springframework: WARN
+  level.org.springframework.web: WARN
+  level.org.springframework.kafka: WARN
+  level.org.apache.jena.riot: ERROR
+
+server:
+  port: 8080
+
+spring:
+  aop:
+    proxy-target-class: false
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:fdk_harvester}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:postgres}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  flyway:
+    enabled: true
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:fdk-harvester}
+      properties:
+        schema.registry.url: ${SPRING_KAFKA_CONSUMER_PROPERTIES_SCHEMA_REGISTRY_URL:http://localhost:8081}
+    listener:
+      # false = app starts even when Kafka is down (listener can be started later when Kafka is available)
+      auto-startup: ${SPRING_KAFKA_LISTENER_AUTO_STARTUP:false}
+
+application:
+  organizationsUri: ${APPLICATION_ORGANIZATIONS_URI:}
+  datasetUri: ${APPLICATION_DATASET_URI:https://datasets.fellesdatakatalog.digdir.no/datasets}
+  dataserviceUri: ${APPLICATION_DATASERVICE_URI:https://dataservices.fellesdatakatalog.digdir.no/dataservices}
+  informationmodelUri: ${APPLICATION_INFORMATIONMODEL_URI:https://informationmodels.fellesdatakatalog.digdir.no/informationmodels}
+  eventUri: ${APPLICATION_EVENT_URI:https://events.fellesdatakatalog.digdir.no/events}
+  serviceUri: ${APPLICATION_SERVICE_URI:https://services.fellesdatakatalog.digdir.no/services}
+  conceptUri: ${APPLICATION_CONCEPT_URI:https://concepts.fellesdatakatalog.digdir.no/concepts}
+
+app:
+  kafka:
+    topic:
+      harvest-events: ${APP_KAFKA_TOPIC_HARVEST_EVENTS:harvest-events}
+      dataset-events: ${APP_KAFKA_TOPIC_DATASET_EVENTS:dataset-events}
+      concept-events: ${APP_KAFKA_TOPIC_CONCEPT_EVENTS:concept-events}
+      dataservice-events: ${APP_KAFKA_TOPIC_DATASERVICE_EVENTS:data-service-events}
+      informationmodel-events: ${APP_KAFKA_TOPIC_INFORMATIONMODEL_EVENTS:information-model-events}
+      service-events: ${APP_KAFKA_TOPIC_SERVICE_EVENTS:service-events}
+      event-events: ${APP_KAFKA_TOPIC_EVENT_EVENTS:event-events}
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+    instances:
+      harvest-cb:
+        baseConfig: default
+
+management:
+  endpoints:
+    web:
+      base-path: /actuator
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
+
+---
+spring:
+  config.activate.on-profile: develop
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fdk_harvester
+    username: postgres
+    password: postgres
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      properties:
+        schema.registry.url: http://localhost:8081

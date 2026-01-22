@@ -1,0 +1,11 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - fdk-harvester-deployment.yaml
+  - fdk-harvester-service.yaml
+images:
+  - name: fdk-harvester
+    newName: ghcr.io/informasjonsforvaltning/fdk-harvester
+    newTag: $(GIT_COMMIT_SHA)
+

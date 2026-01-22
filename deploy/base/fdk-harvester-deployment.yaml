@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    fdk.service: fdk-harvester
+  name: fdk-harvester
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      fdk.service: fdk-harvester
+  strategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        fdk.service: fdk-harvester
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+    spec:
+      containers:
+        - name: fdk-harvester
+          image: fdk-harvester
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: POSTGRES_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: PORT
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-harvester
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-harvester
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fdk-harvester
+                  key: POSTGRES_PASSWORD
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              valueFrom:
+                secretKeyRef:
+                  name: kafka
+                  key: BROKERS
+            - name: SPRING_KAFKA_CONSUMER_PROPERTIES_SCHEMA_REGISTRY_URL
+              valueFrom:
+                secretKeyRef:
+                  name: kafka
+                  key: SCHEMA_REGISTRY
+            - name: APPLICATION_ORGANIZATIONS_URI
+              valueFrom:
+                secretKeyRef:
+                  name: commonurl
+                  key: ORGANIZATION_CATALOG_HOST
+            - name: APPLICATION_DATASET_URI
+              valueFrom:
+                secretKeyRef:
+                  name: commonurl
+                  key: FDK_DATASET_HARVESTER_BASE_URI
+            - name: APPLICATION_DATASERVICE_URI
+              valueFrom:
+                secretKeyRef:
+                  name: commonurl
+                  key: FDK_DATASERVICE_HARVESTER_BASE_URI
+                  optional: true
+            - name: APPLICATION_INFORMATIONMODEL_URI
+              valueFrom:
+                secretKeyRef:
+                  name: commonurl
+                  key: FDK_INFORMATIONMODEL_HARVESTER_BASE_URI
+                  optional: true
+            - name: APPLICATION_EVENT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: commonurl
+                  key: FDK_EVENT_HARVESTER_BASE_URI
+                  optional: true
+            - name: APPLICATION_SERVICE_URI
+              valueFrom:
+                secretKeyRef:
+                  name: commonurl
+                  key: FDK_SERVICE_HARVESTER_BASE_URI
+                  optional: true
+            - name: APPLICATION_CONCEPT_URI
+              valueFrom:
+                secretKeyRef:
+                  name: commonurl
+                  key: FDK_CONCEPT_HARVESTER_BASE_URI
+                  optional: true
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: APP_KAFKA_TOPIC_HARVEST_EVENTS
+              value: "harvest-events"
+            - name: APP_KAFKA_TOPIC_DATASET_EVENTS
+              value: "dataset-events"
+            - name: APP_KAFKA_TOPIC_CONCEPT_EVENTS
+              value: "concept-events"
+            - name: APP_KAFKA_TOPIC_DATASERVICE_EVENTS
+              value: "data-service-events"
+            - name: APP_KAFKA_TOPIC_INFORMATIONMODEL_EVENTS
+              value: "information-model-events"
+            - name: APP_KAFKA_TOPIC_SERVICE_EVENTS
+              value: "service-events"
+            - name: APP_KAFKA_TOPIC_EVENT_EVENTS
+              value: "event-events"
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            successThreshold: 1
+            failureThreshold: 5
+      restartPolicy: Always
+

@@ -1,0 +1,48 @@
+name: Deploy to staging
+
+permissions:
+  contents: read
+  packages: write
+
+on:
+  pull_request:
+    types: [ready_for_review, opened, reopened, synchronize]
+    branches:
+      - main
+
+jobs:
+  build-fdk-harvester:
+    name: Build when pull request is created
+    if: github.event.pull_request.draft == false
+    uses: Informasjonsforvaltning/workflows/.github/workflows/build-push.yaml@main
+    with:
+      app_name: fdk-harvester
+      java_version: '21'
+      coverage_file_path: ./target/site/jacoco/jacoco.xml
+      environment: staging
+      gh_environment: staging
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  deploy:
+    name: Deploy to staging environment
+    if: ${{ github.actor != 'dependabot[bot]' && github.event.pull_request.draft == false }}
+    needs: [ build-fdk-harvester ]
+    uses: Informasjonsforvaltning/workflows/.github/workflows/kustomize-deploy.yaml@main
+    with:
+      app_name: fdk-harvester
+      environment: staging
+      gh_environment: staging
+      cluster: digdir-fdk-dev
+    secrets:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DIGDIR_FDK_AUTODEPLOY: ${{ secrets.DIGDIR_FDK_DEV_AUTODEPLOY }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+  
+  dependabot-build:
+    name: Build image on PR from dependabot
+    if: ${{ github.actor == 'dependabot[bot]' && github.event_name == 'pull_request' }}
+    uses: Informasjonsforvaltning/workflows/.github/workflows/build.yaml@main
+    with:
+      java_version: '21'    
