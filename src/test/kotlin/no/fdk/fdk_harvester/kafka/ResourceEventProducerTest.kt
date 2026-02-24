@@ -187,7 +187,7 @@ class ResourceEventProducerTest {
             datasetEventsTopic = "dataset-events",
             conceptEventsTopic = "concept-events",
             dataServiceEventsTopic = "dataservice-events",
-            informationModelEventsTopic = "informationmodel-events",
+            informationModelEventsTopic = "information-model-events",
             serviceEventsTopic = "service-events",
             eventEventsTopic = "event-events"
         )
