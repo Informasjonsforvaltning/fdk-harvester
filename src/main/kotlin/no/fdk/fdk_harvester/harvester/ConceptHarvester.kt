@@ -129,6 +129,7 @@ class ConceptHarvester(
 
     private fun ConceptRDFModel.updateDBOs(harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): ResourceEntity? {
         val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
+        validateSourceUrl(resourceURI, harvestSource, dbMeta)
         val harvestedChecksum = computeChecksum(harvested)
         return when {
             dbMeta == null || dbMeta.removed || conceptHasChanges(dbMeta, harvestedChecksum) -> {
@@ -166,6 +167,7 @@ class ConceptHarvester(
             .filter { forceUpdate || it.first.collectionHasChanges(it.second, computeChecksum(it.first.harvested)) }
             .map {
                 val dbMeta = it.second
+                validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val collectionChecksum = computeChecksum(it.first.harvested)
                 val collectionMeta = if (dbMeta == null || it.first.collectionHasChanges(dbMeta, collectionChecksum)) {
                     it.first.mapToResource(harvestDate, dbMeta, collectionChecksum, harvestSource)

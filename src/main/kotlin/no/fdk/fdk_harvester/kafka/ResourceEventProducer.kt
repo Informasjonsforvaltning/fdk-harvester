@@ -146,10 +146,6 @@ class ResourceEventProducer(
                 graph,
                 timestamp
             )
-            else -> {
-                logger.warn("Unsupported dataType for resource event: $dataType")
-                null
-            }
         }
     }
 
@@ -209,10 +205,6 @@ class ResourceEventProducer(
                 "", // Empty graph for removed events
                 timestamp
             )
-            else -> {
-                logger.warn("Unsupported dataType for resource event: $dataType")
-                null
-            }
         }
     }
 
@@ -229,7 +221,6 @@ class ResourceEventProducer(
             DataType.informationmodel -> informationModelEventsTopic
             DataType.service, DataType.publicService -> serviceEventsTopic
             DataType.event -> eventEventsTopic
-            else -> null
         }
     }
 }

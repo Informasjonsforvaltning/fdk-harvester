@@ -56,7 +56,7 @@ class InformationModelHarvester(
                 val dbMeta = it.second
                 validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
-                val updatedCatalogMeta = if (dbMeta == null || dbMeta.type != ResourceType.CATALOG || it.first.catalogHasChanges(dbMeta)) {
+                val updatedCatalogMeta = if (dbMeta == null || it.first.catalogHasChanges(dbMeta)) {
                     it.first.mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
                         .also { resourceRepository.save(it) }
                 } else {
@@ -84,7 +84,7 @@ class InformationModelHarvester(
                             informationModelUriBase = applicationProperties.informationmodelUri
                         )
                         val graphWithRecords = infoModel.harvested.union(catalogRecordModel)
-                        val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE) ?: ""
+                        val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                         resourceGraphs[modelMeta.fdkId] = graphString
                     }
                 }
@@ -139,7 +139,7 @@ class InformationModelHarvester(
         val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
         val harvestedChecksum = computeChecksum(harvested)
         return when {
-            dbMeta == null || dbMeta.removed || dbMeta.type != ResourceType.INFORMATIONMODEL || modelHasChanges(dbMeta) -> {
+            dbMeta == null || dbMeta.removed || modelHasChanges(dbMeta) -> {
                 val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
                 resourceRepository.save(updatedMeta)
                 updatedMeta

@@ -116,7 +116,7 @@ class EventHarvester(
                 val dbMeta = it.second
                 validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
-                val catalogMeta = if (dbMeta == null || dbMeta.type != ResourceType.CATALOG || it.first.catalogHasChanges(dbMeta, catalogChecksum)) {
+                val catalogMeta = if (dbMeta == null || it.first.catalogHasChanges(dbMeta, catalogChecksum)) {
                     it.first.mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
                         .also { updatedMeta -> resourceRepository.save(updatedMeta) }
                 } else {
@@ -186,7 +186,7 @@ class EventHarvester(
                     } else {
                         it.harvested
                     }
-                    val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE) ?: ""
+                    val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                     resourceGraphs[meta.fdkId] = graphString
                     FdkIdAndUri(fdkId = meta.fdkId, uri = it.eventURI)
                 }
@@ -196,9 +196,10 @@ class EventHarvester(
 
     private fun EventRDFModel.updateDBOs(harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): ResourceEntity? {
         val dbMeta = resourceRepository.findByIdOrNull(eventURI)
+        validateSourceUrl(eventURI, harvestSource, dbMeta)
         val harvestedChecksum = computeChecksum(harvested)
         return when {
-            dbMeta == null || dbMeta.removed || dbMeta.type != ResourceType.EVENT || hasChanges(dbMeta, harvestedChecksum) -> {
+            dbMeta == null || dbMeta.removed || hasChanges(dbMeta, harvestedChecksum) -> {
                 val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
                 resourceRepository.save(updatedMeta)
                 updatedMeta

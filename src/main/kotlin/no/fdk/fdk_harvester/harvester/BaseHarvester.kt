@@ -158,7 +158,7 @@ abstract class BaseHarvester(
      */
     protected fun getOrCreateHarvestSource(uri: String, checksum: String, issued: Instant): HarvestSourceEntity {
         val existing = harvestSourceRepository.findByUri(uri)
-        return existing ?: harvestSourceRepository.save(HarvestSourceEntity(uri = uri, checksum = checksum, issued = issued))
+        return existing ?: harvestSourceRepository.save(HarvestSourceEntity(uri = uri, checksum = checksum, issued = issued, initialized = false))
     }
 
     /**
@@ -225,7 +225,7 @@ abstract class BaseHarvester(
  */
 private fun InputStream.readWithSizeLimit(charset: Charset): String {
     val byteBuffer = ByteArray(8192)
-    val result = ByteArrayOutputStream(MAX_CONTENT_SIZE.toInt())
+    val result = ByteArrayOutputStream(MAX_CONTENT_SIZE)
     var totalBytesRead = 0L
 
     try {

@@ -104,8 +104,9 @@ class ServiceHarvester(
             .filter { forceUpdate || it.first.hasChanges(it.second, computeChecksum(it.first.harvested)) }
             .map {
                 val dbMeta = it.second
+                validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val catalogChecksum = computeChecksum(it.first.harvested)
-                val updatedMeta = if (dbMeta == null || dbMeta.type != ResourceType.CATALOG || it.first.hasChanges(dbMeta, catalogChecksum)) {
+                val updatedMeta = if (dbMeta == null || it.first.hasChanges(dbMeta, catalogChecksum)) {
                     it.first.mapToResourceMeta(harvestDate, dbMeta, catalogChecksum, harvestSource)
                         .also { resourceRepository.save(it) }
                 } else {
@@ -119,6 +120,7 @@ class ServiceHarvester(
 
                 val catalogFdkUri = "${applicationProperties.serviceUri.substringBeforeLast("/")}/catalogs/${updatedMeta.fdkId}"
                 it.first.services.forEach { serviceURI: String ->
+                    validateSourceUrl(serviceURI, harvestSource, resourceRepository.findByIdOrNull(serviceURI))
                     addIsPartOfToService(serviceURI, updatedMeta.uri)
                     serviceUriToCatalogFdkUri[serviceURI] = catalogFdkUri
                 }
@@ -175,7 +177,7 @@ class ServiceHarvester(
                     } else {
                         it.harvested
                     }
-                    val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE) ?: ""
+                    val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                     resourceGraphs[meta.fdkId] = graphString
                     FdkIdAndUri(fdkId = meta.fdkId, uri = it.resourceURI)
                 }
@@ -185,9 +187,10 @@ class ServiceHarvester(
 
     private fun ServiceRDFModel.updateDBOs(harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): ResourceEntity? {
         val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
+        validateSourceUrl(resourceURI, harvestSource, dbMeta)
         val harvestedChecksum = computeChecksum(harvested)
         return when {
-            dbMeta == null || dbMeta.removed || dbMeta.type != ResourceType.SERVICE || hasChanges(dbMeta, harvestedChecksum) -> {
+            dbMeta == null || dbMeta.removed || hasChanges(dbMeta, harvestedChecksum) -> {
                 val updatedMeta = mapToResourceMeta(harvestDate, dbMeta, harvestedChecksum, harvestSource)
                 resourceRepository.save(updatedMeta)
                 updatedMeta
