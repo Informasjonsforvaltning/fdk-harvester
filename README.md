@@ -13,3 +13,7 @@ Kafka-based harvester for the Felles datakatalog (FDK). Consumes harvest command
   - `GET /actuator/prometheus` – metrics
 
 Event schemas are defined in `kafka/schemas/` (Avro). Code is documented with KDoc (Kotlin doc comments) on public types and main functions.
+
+## Initial deployment (empty database)
+
+On first deploy, the database has no harvest sources. Each harvest source is tracked in the database with an `initialized` flag. The first time a harvest runs for a given datasource URL, it is executed as a **forced** full harvest (so all resources are written), and the source is then marked initialized. Later harvests for that URL use normal change detection. No manual configuration is required: use the same scheduled harvest as usual; the first run per source is forced automatically, and subsequent runs are not.

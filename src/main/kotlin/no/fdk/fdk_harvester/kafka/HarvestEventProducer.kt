@@ -56,7 +56,7 @@ class HarvestEventProducer(
     }
 
     /**
-     * Sends a HARVESTING phase event with the given run and report metadata. No-op if runId is null.
+     * Sends a HARVESTING phase event with the given run and report metadata.
      */
     fun produceHarvestingEvent(
         runId: String,
@@ -69,11 +69,6 @@ class HarvestEventProducer(
         changedResourcesCount: Int,
         removedResourcesCount: Int
     ) {
-        if (runId == null) {
-            logger.debug("Skipping harvest event production - no runId")
-            return
-        }
-
         try {
             val event = HarvestEvent.newBuilder()
                 .setPhase(HarvestPhase.HARVESTING)

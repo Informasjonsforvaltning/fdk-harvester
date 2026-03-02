@@ -60,7 +60,7 @@ class DataServiceHarvester(
                 val dbMeta = it.second
                 validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
-                val catalogMeta = if (dbMeta == null || dbMeta.type != ResourceType.CATALOG || it.first.catalogHasChanges(dbMeta, catalogChecksum)) {
+                val catalogMeta = if (dbMeta == null || it.first.catalogHasChanges(dbMeta, catalogChecksum)) {
                     it.first.mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
                         .also { updatedMeta -> resourceRepository.save(updatedMeta) }
                 } else {
@@ -88,7 +88,7 @@ class DataServiceHarvester(
                             dataserviceUriBase = applicationProperties.dataserviceUri
                         )
                         val graphWithRecords = service.harvestedService.union(catalogRecordModel)
-                        val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE) ?: ""
+                        val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                         resourceGraphs[serviceMeta.fdkId] = graphString
                     }
                 }
@@ -148,7 +148,7 @@ class DataServiceHarvester(
         val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
         val harvestedChecksum = computeChecksum(harvestedService)
         return when {
-            dbMeta == null || dbMeta.removed || dbMeta.type != ResourceType.DATASERVICE || serviceHasChanges(dbMeta, harvestedChecksum) -> {
+            dbMeta == null || dbMeta.removed || serviceHasChanges(dbMeta, harvestedChecksum) -> {
                 val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
                 resourceRepository.save(updatedMeta)
                 updatedMeta

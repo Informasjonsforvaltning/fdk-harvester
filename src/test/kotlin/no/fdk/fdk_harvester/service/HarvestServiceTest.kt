@@ -1,8 +1,6 @@
 package no.fdk.fdk_harvester.service
 
-import io.mockk.every
-import io.mockk.mockk
-import io.mockk.verify
+import io.mockk.*
 import no.fdk.fdk_harvester.harvester.ConceptHarvester
 import no.fdk.fdk_harvester.harvester.DataServiceHarvester
 import no.fdk.fdk_harvester.harvester.DatasetHarvester
@@ -20,6 +18,8 @@ import no.fdk.harvest.DataType
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertThrows
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -47,6 +47,14 @@ class HarvestServiceTest {
         resourceRepository = resourceRepository,
         harvestSourceRepository = harvestSourceRepository
     )
+
+    private fun initializedSource(uri: String = "http://example.org/source") =
+        HarvestSourceEntity(id = 1L, uri = uri, checksum = "c", issued = Instant.now(), initialized = true)
+
+    @BeforeEach
+    fun stubHarvestSourceAsInitialized() {
+        every { harvestSourceRepository.findByUri(any()) } returns initializedSource()
+    }
 
     @Test
     fun `HarvestService has non-null logger so logging never throws NPE`() {
@@ -193,6 +201,29 @@ class HarvestServiceTest {
 
         assertEquals(report, result)
         verify(exactly = 1) { eventHarvester?.harvestEvents(any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `executeHarvest when source not initialized runs with forced true and marks initialized after success`() {
+        every { harvestSourceRepository.findByUri("http://example.org/source") } returns null andThen
+            HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now(), initialized = false)
+        every { conceptHarvester?.harvestConceptCollection(any(), any(), any(), any()) } returns createReport("concept")
+        every { harvestSourceRepository.save(any<HarvestSourceEntity>()) } answers { firstArg() }
+
+        val result = harvestService.executeHarvest(
+            dataSourceId = "ds-1",
+            dataSourceUrl = "http://example.org/source",
+            dataType = DataType.concept,
+            acceptHeader = "text/turtle",
+            runId = "run-1",
+            forced = false
+        )
+
+        assertNotNull(result)
+        verify(exactly = 1) { conceptHarvester?.harvestConceptCollection(any(), any(), eq(true), any()) }
+        val saveSlot = slot<HarvestSourceEntity>()
+        verify(exactly = 1) { harvestSourceRepository.save(capture(saveSlot)) }
+        assertTrue(saveSlot.captured.initialized)
     }
 
     @Test

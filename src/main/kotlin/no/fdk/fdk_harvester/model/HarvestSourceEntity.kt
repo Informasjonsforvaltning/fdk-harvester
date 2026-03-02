@@ -3,7 +3,7 @@ package no.fdk.fdk_harvester.model
 import jakarta.persistence.*
 import java.time.Instant
 
-/** JPA entity for a harvest source (URI, checksum, issued). */
+/** JPA entity for a harvest source (URI, checksum, issued, initialized). */
 @Entity
 @Table(name = "harvest_source")
 data class HarvestSourceEntity(
@@ -19,6 +19,10 @@ data class HarvestSourceEntity(
     val checksum: String,
 
     @Column(name = "issued", nullable = false, columnDefinition = "TIMESTAMP")
-    val issued: Instant
+    val issued: Instant,
+
+    /** True after the first successful harvest for this source; until then harvests run forced. */
+    @Column(name = "initialized", nullable = false)
+    val initialized: Boolean = false
 )
 

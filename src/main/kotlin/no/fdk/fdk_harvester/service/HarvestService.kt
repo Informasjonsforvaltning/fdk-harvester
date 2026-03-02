@@ -43,9 +43,11 @@ open class HarvestService(
 
     /**
      * Executes a harvest for the given parameters.
-     * This method handles the actual harvest execution and metrics.
+     * If the harvest source is not yet initialized (first run for this URL), the harvest is forced
+     * and the source is marked initialized after success. This avoids manual config for initial deploy.
      * Returns the harvest report.
      */
+    @Transactional
     override fun executeHarvest(
         dataSourceId: String,
         dataSourceUrl: String,
@@ -54,7 +56,13 @@ open class HarvestService(
         runId: String,
         forced: Boolean
     ): no.fdk.fdk_harvester.model.HarvestReport? {
-        logger().info("Initiating harvest for dataSourceId: $dataSourceId, dataType: $dataType, runId: $runId, forced: $forced")
+        val existingSource = harvestSourceRepository.findByUri(dataSourceUrl)
+        val forceBecauseNotInitialized = existingSource == null || !existingSource.initialized
+        val effectiveForced = forced || forceBecauseNotInitialized
+        if (forceBecauseNotInitialized) {
+            logger().info("Harvest source not initialized for $dataSourceUrl, running forced harvest")
+        }
+        logger().info("Initiating harvest for dataSourceId: $dataSourceId, dataType: $dataType, runId: $runId, forced: $effectiveForced")
 
         return try {
             // Create HarvestDataSource
@@ -69,30 +77,32 @@ open class HarvestService(
 
             val report = when (dataType) {
                 DataType.concept -> conceptHarvester?.harvestConceptCollection(
-                    dataSource, harvestDate, forced, runId
+                    dataSource, harvestDate, effectiveForced, runId
                 )
                 DataType.dataset -> datasetHarvester?.harvestDatasetCatalog(
-                    dataSource, harvestDate, forced, runId
+                    dataSource, harvestDate, effectiveForced, runId
                 )
                 DataType.dataservice -> dataServiceHarvester?.harvestDataServiceCatalog(
-                    dataSource, harvestDate, forced, runId
+                    dataSource, harvestDate, effectiveForced, runId
                 )
                 DataType.informationmodel -> informationModelHarvester?.harvestInformationModelCatalog(
-                    dataSource, harvestDate, forced, runId
+                    dataSource, harvestDate, effectiveForced, runId
                 )
                 DataType.publicService, DataType.service -> serviceHarvester?.harvestServices(
-                    dataSource, harvestDate, forced, runId
+                    dataSource, harvestDate, effectiveForced, runId
                 )
                 DataType.event -> eventHarvester?.harvestEvents(
-                    dataSource, harvestDate, forced, runId
+                    dataSource, harvestDate, effectiveForced, runId
                 )
-                else -> {
-                    logger().error("Unknown data type: $dataType")
-                    null
-                }
             }
 
             logger().info("Completed harvest for dataSourceId: $dataSourceId, dataType: $dataType")
+            if (report != null && forceBecauseNotInitialized) {
+                harvestSourceRepository.findByUri(dataSourceUrl)?.let { source ->
+                    harvestSourceRepository.save(source.copy(initialized = true))
+                    logger().info("Marked harvest source as initialized for $dataSourceUrl")
+                }
+            }
             report
         } catch (ex: Exception) {
             logger().error("Harvest failure for dataSourceId: $dataSourceId", ex)
@@ -177,7 +187,6 @@ open class HarvestService(
             DataType.informationmodel -> resourceType == ResourceType.INFORMATIONMODEL
             DataType.service, DataType.publicService -> resourceType == ResourceType.SERVICE
             DataType.event -> resourceType == ResourceType.EVENT
-            else -> false
         }
     }
 
