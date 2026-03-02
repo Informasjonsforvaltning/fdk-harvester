@@ -1,7 +1,6 @@
 logging:
   level.root: WARN
-  level.no: ${LOG_LEVEL:DEBUG}
-  level.no.fdk.fdk_harvester.kafka.ResourceEventProducer: DEBUG
+  level.no: ${LOG_LEVEL:WARN}
   level.org.springframework: WARN
   level.org.springframework.web: WARN
   level.org.springframework.kafka: WARN
