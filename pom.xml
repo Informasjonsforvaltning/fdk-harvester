@@ -33,7 +33,7 @@
         <testcontainers.version>2.0.3</testcontainers.version>
         <jena.version>5.6.0</jena.version>
         <avro.version>1.12.1</avro.version>
-        <confluent.version>8.1.1</confluent.version>
+        <confluent.version>8.2.0</confluent.version>
     </properties>
 
     <repositories>
