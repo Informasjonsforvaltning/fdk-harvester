@@ -118,7 +118,7 @@ class BaseHarvesterTest {
     }
 
     @Test
-    fun `test validateSourceUrl throws when different harvest source`() {
+    fun `test validateSourceUrl throws conflict when different harvest source`() {
         val resourceUri = "http://example.org/resource"
         val harvestSource = HarvestSourceEntity(id = 1L, uri = "http://example.org/source1", checksum = "abc", issued = Instant.now())
         val dbResource = ResourceEntity(
@@ -132,7 +132,7 @@ class BaseHarvesterTest {
             harvestSource = HarvestSourceEntity(id = 2L, uri = "http://example.org/source2", checksum = "def", issued = Instant.now())
         )
 
-        val exception = assertThrows(HarvestException::class.java) {
+        val exception = assertThrows(HarvestSourceConflictException::class.java) {
             testHarvester.testValidateSourceUrl(resourceUri, harvestSource, dbResource)
         }
 

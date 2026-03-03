@@ -1,5 +1,7 @@
 package no.fdk.fdk_harvester.harvester
 
+import no.fdk.fdk_harvester.error.HarvestErrorCategory
+import no.fdk.fdk_harvester.error.HarvestErrorMessageMapper
 import no.fdk.fdk_harvester.model.HarvestDataSource
 import no.fdk.fdk_harvester.model.HarvestReport
 import no.fdk.fdk_harvester.model.HarvestSourceEntity
@@ -116,7 +118,11 @@ abstract class BaseHarvester(
                     HarvestReportBuilder.createErrorReport(
                         dataType = dataType,
                         source = source,
-                        errorMessage = "Not able to harvest, no accept header supplied",
+                        errorMessage = HarvestErrorMessageMapper.toUserMessage(
+                            category = HarvestErrorCategory.VALIDATION_ERROR,
+                            dataSourceUrl = source.url,
+                            dataType = null
+                        ),
                         harvestDate = harvestDate,
                         runId = runId
                     )
@@ -129,7 +135,11 @@ abstract class BaseHarvester(
                     HarvestReportBuilder.createErrorReport(
                         dataType = dataType,
                         source = source,
-                        errorMessage = "Not able to harvest, header ${source.acceptHeaderValue} is not acceptable",
+                        errorMessage = HarvestErrorMessageMapper.toUserMessage(
+                            category = HarvestErrorCategory.VALIDATION_ERROR,
+                            dataSourceUrl = source.url,
+                            dataType = null
+                        ),
                         harvestDate = harvestDate,
                         runId = runId
                     )
@@ -141,10 +151,24 @@ abstract class BaseHarvester(
             }
         } catch (ex: Exception) {
             logger.error("Harvest of ${source.url} failed", ex)
+
+            val category = when (ex) {
+                is HarvestSourceConflictException ->
+                    HarvestErrorCategory.SOURCE_CONFLICT
+                is HarvestException ->
+                    HarvestErrorCategory.SOURCE_UNAVAILABLE
+                else ->
+                    HarvestErrorCategory.INTERNAL_ERROR
+            }
+
             HarvestReportBuilder.createErrorReport(
                 dataType = dataType,
                 source = source,
-                errorMessage = ex.message ?: "Unknown error",
+                errorMessage = HarvestErrorMessageMapper.toUserMessage(
+                    category = category,
+                    dataSourceUrl = source.url,
+                    dataType = null
+                ),
                 harvestDate = harvestDate,
                 runId = runId
             )
@@ -183,7 +207,7 @@ abstract class BaseHarvester(
 
     /**
      * Validates that a resource URI can be harvested from the given harvest source.
-     * Throws HarvestException if the resource already exists, is not removed, and has a different harvest source.
+     * Throws HarvestSourceConflictException if the resource already exists, is not removed, and has a different harvest source.
      * 
      * @param resourceUri The URI of the resource to validate
      * @param harvestSource The harvest source attempting to harvest this resource
@@ -196,7 +220,7 @@ abstract class BaseHarvester(
         dbResource: ResourceEntity?
     ) {
         if (dbResource != null && !dbResource.removed && dbResource.harvestSource.id != harvestSource.id) {
-            throw HarvestException(
+            throw HarvestSourceConflictException(
                 "Resource $resourceUri already exists and was harvested from ${dbResource.harvestSource.uri}. " +
                 "Cannot harvest from different source ${harvestSource.uri}"
             )
