@@ -109,6 +109,13 @@ class EventHarvester(
 
     private fun updateCatalogs(catalogs: List<CatalogAndEventModels>, harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): Pair<List<FdkIdAndUri>, Map<String, String>> {
         val eventUriToCatalogFdkUri = mutableMapOf<String, String>()
+        // Validate source ownership for all catalogs and events before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        catalogs.forEach { catalog ->
+            validateSourceUrl(catalog.resourceURI, harvestSource, resourceRepository.findByIdOrNull(catalog.resourceURI))
+            catalog.events.forEach { eventURI ->
+                validateSourceUrl(eventURI, harvestSource, resourceRepository.findByIdOrNull(eventURI))
+            }
+        }
         val updatedCatalogs = catalogs
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
             .filter { forceUpdate || it.first.catalogHasChanges(it.second, computeChecksum(it.first.harvestedCatalog)) }

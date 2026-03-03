@@ -53,8 +53,16 @@ class DataServiceHarvester(
         val removedServices = mutableListOf<ResourceEntity>()
         val resourceGraphs = mutableMapOf<String, String>()
         
-        splitCatalogsFromRDF(harvested, sourceUrl)
+        val catalogPairs = splitCatalogsFromRDF(harvested, sourceUrl)
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
+        // Validate source ownership for all catalogs and services before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        catalogPairs.forEach { (catalog, _) ->
+            validateSourceUrl(catalog.resourceURI, harvestSource, resourceRepository.findByIdOrNull(catalog.resourceURI))
+            catalog.services.forEach { service ->
+                validateSourceUrl(service.resourceURI, harvestSource, resourceRepository.findByIdOrNull(service.resourceURI))
+            }
+        }
+        catalogPairs
             .filter { forceUpdate || it.first.catalogHasChanges(it.second, computeChecksum(it.first.harvestedCatalog)) }
             .forEach {
                 val dbMeta = it.second

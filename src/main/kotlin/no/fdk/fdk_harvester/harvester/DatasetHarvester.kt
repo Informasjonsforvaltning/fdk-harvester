@@ -50,8 +50,16 @@ class DatasetHarvester(
         val updatedDatasets = mutableListOf<ResourceEntity>()
         val removedDatasets = mutableListOf<ResourceEntity>()
         val resourceGraphs = mutableMapOf<String, String>()
-        extractCatalogs(harvested, sourceUrl)
+        val catalogPairs = extractCatalogs(harvested, sourceUrl)
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resource.uri)) }
+        // Validate source ownership for all resources in the feed before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        catalogPairs.forEach { (catalog, dbCatalog) ->
+            validateSourceUrl(catalog.resource.uri, harvestSource, dbCatalog)
+            catalog.datasets.forEach { dataset ->
+                validateSourceUrl(dataset.resource.uri, harvestSource, resourceRepository.findByIdOrNull(dataset.resource.uri))
+            }
+        }
+        catalogPairs
             .filter { forceUpdate || it.first.catalogHasChanges(it.second) }
             .forEach {
                 val dbMeta = it.second
