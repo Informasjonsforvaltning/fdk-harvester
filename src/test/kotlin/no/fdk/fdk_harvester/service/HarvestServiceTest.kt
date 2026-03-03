@@ -309,6 +309,62 @@ class HarvestServiceTest {
     }
 
     @Test
+    fun `markResourcesAsDeleted also marks catalog and collection as removed`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val datasetResource =
+            ResourceEntity(
+                uri = "http://example.org/dataset1",
+                type = ResourceType.DATASET,
+                fdkId = "fdk-ds",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "x",
+                harvestSource = source,
+            )
+        val catalogResource =
+            ResourceEntity(
+                uri = "http://example.org/catalog1",
+                type = ResourceType.CATALOG,
+                fdkId = "fdk-cat",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "y",
+                harvestSource = source,
+            )
+        val collectionResource =
+            ResourceEntity(
+                uri = "http://example.org/collection1",
+                type = ResourceType.COLLECTION,
+                fdkId = "fdk-col",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "z",
+                harvestSource = source,
+            )
+        every { harvestSourceRepository.findByUri("http://example.org/source") } returns source
+        every { resourceRepository.findAllByHarvestSourceId(1L) } returns
+            listOf(datasetResource, catalogResource, collectionResource)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result =
+            harvestService.markResourcesAsDeleted(
+                sourceUrl = "http://example.org/source",
+                dataType = DataType.dataset,
+                dataSourceId = "ds-1",
+                runId = "run-1",
+            )
+
+        // DATASET + CATALOG + COLLECTION should all be marked as removed and reported
+        assertEquals(3, result.removedResources.size)
+        val ids = result.removedResources.map { it.fdkId }.toSet()
+        assertTrue(ids.containsAll(listOf("fdk-ds", "fdk-cat", "fdk-col")))
+        verify(exactly = 3) { resourceRepository.save(any<ResourceEntity>()) }
+    }
+
+    @Test
     fun `markResourcesAsDeleted filters by dataType`() {
         val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
         val datasetResource = ResourceEntity(

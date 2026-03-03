@@ -133,8 +133,15 @@ open class HarvestService(
 
         val harvestDate = Calendar.getInstance()
         val resources = resourceRepository.findAllByHarvestSourceId(harvestSource.id!!)
-        // Filter to only resources that match the dataType (excluding CATALOG and COLLECTION which are metadata)
-        val resourcesToUpdate = resources.filter { !it.removed && matchesDataType(it.type, dataType) }
+        // Filter to only resources that match the dataType, plus CATALOG and COLLECTION metadata for the source.
+        // This ensures that when removeAll=true, both the resource type and its catalogs/collections are marked deleted.
+        val resourcesToUpdate =
+            resources.filter { resource ->
+                !resource.removed &&
+                    (matchesDataType(resource.type, dataType) ||
+                        resource.type == ResourceType.CATALOG ||
+                        resource.type == ResourceType.COLLECTION)
+            }
 
         val removedResources = if (resourcesToUpdate.isEmpty()) {
             logger().info("No resources to mark as deleted for sourceUrl: $sourceUrl")
