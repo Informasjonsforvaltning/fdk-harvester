@@ -162,6 +162,10 @@ class ConceptHarvester(
                 conceptUriToCollectionFdkUri.putIfAbsent(conceptURI, collectionFdkUri)
             }
         }
+        // Validate source ownership for all collections before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        collections.forEach { coll ->
+            validateSourceUrl(coll.resourceURI, harvestSource, resourceRepository.findByIdOrNull(coll.resourceURI))
+        }
         val updated = collections
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
             .filter { forceUpdate || it.first.collectionHasChanges(it.second, computeChecksum(it.first.harvested)) }

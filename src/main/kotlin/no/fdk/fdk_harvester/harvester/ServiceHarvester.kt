@@ -99,6 +99,13 @@ class ServiceHarvester(
 
     private fun updateCatalogs(catalogs: List<ServiceCatalogRDFModel>, harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): Pair<List<FdkIdAndUri>, Map<String, String>> {
         val serviceUriToCatalogFdkUri = mutableMapOf<String, String>()
+        // Validate source ownership for all catalogs and services before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        catalogs.forEach { catalog ->
+            validateSourceUrl(catalog.resourceURI, harvestSource, resourceRepository.findByIdOrNull(catalog.resourceURI))
+            catalog.services.forEach { serviceURI ->
+                validateSourceUrl(serviceURI, harvestSource, resourceRepository.findByIdOrNull(serviceURI))
+            }
+        }
         val updatedCatalogs = catalogs
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
             .filter { forceUpdate || it.first.hasChanges(it.second, computeChecksum(it.first.harvested)) }

@@ -49,8 +49,16 @@ class InformationModelHarvester(
         val updatedModels = mutableListOf<ResourceEntity>()
         val removedModels = mutableListOf<ResourceEntity>()
         val resourceGraphs = mutableMapOf<String, String>()
-        splitCatalogsFromRDF(harvested, sourceUrl)
+        val catalogPairs = splitCatalogsFromRDF(harvested, sourceUrl)
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
+        // Validate source ownership for all catalogs and models before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        catalogPairs.forEach { (catalog, _) ->
+            validateSourceUrl(catalog.resourceURI, harvestSource, resourceRepository.findByIdOrNull(catalog.resourceURI))
+            catalog.models.forEach { infoModel ->
+                validateSourceUrl(infoModel.resourceURI, harvestSource, resourceRepository.findByIdOrNull(infoModel.resourceURI))
+            }
+        }
+        catalogPairs
             .filter { forceUpdate || it.first.catalogHasChanges(it.second) }
             .forEach {
                 val dbMeta = it.second
