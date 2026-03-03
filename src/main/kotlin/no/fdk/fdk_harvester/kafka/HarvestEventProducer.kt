@@ -63,11 +63,11 @@ class HarvestEventProducer(
         dataType: DataType,
         dataSourceId: String,
         dataSourceUrl: String,
-        startTime: String,
-        endTime: String,
+        startTime: String?,
+        endTime: String?,
         errorMessage: String?,
-        changedResourcesCount: Int,
-        removedResourcesCount: Int
+        changedResourcesCount: Int?,
+        removedResourcesCount: Int?
     ) {
         try {
             val event = HarvestEvent.newBuilder()

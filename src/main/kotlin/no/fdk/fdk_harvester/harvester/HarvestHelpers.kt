@@ -295,3 +295,5 @@ fun Calendar.formatWithOsloTimeZone(): String =
 
 class HarvestException(url: String) : Exception("Harvest failed for $url")
 
+class HarvestSourceConflictException(message: String) : Exception(message)
+

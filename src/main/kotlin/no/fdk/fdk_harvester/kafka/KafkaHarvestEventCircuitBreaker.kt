@@ -1,8 +1,8 @@
 package no.fdk.fdk_harvester.kafka
 
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
-import no.fdk.fdk_harvester.kafka.HarvestEventProducer
-import no.fdk.fdk_harvester.kafka.ResourceEventProducer
+import no.fdk.fdk_harvester.error.HarvestErrorCategory
+import no.fdk.fdk_harvester.error.HarvestErrorMessageMapper
 import no.fdk.fdk_harvester.service.HarvestServiceApi
 import no.fdk.harvest.HarvestEvent
 import no.fdk.harvest.HarvestPhase
@@ -10,7 +10,6 @@ import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
-import java.time.Instant
 
 /**
  * Processes only INITIATING phase [HarvestEvent] messages: either marks all resources for a source as deleted
@@ -66,8 +65,8 @@ open class KafkaHarvestEventCircuitBreaker(
                 // Emit HARVESTING phase event after completion so counts are included.
                 harvestEventProducer.produceHarvestingEvent(event, report)
             } else {
-                val acceptHeader = requireNotNull(event.acceptHeader?.toString()) { 
-                    "Harvest event missing acceptHeader" 
+                val acceptHeader = requireNotNull(event.acceptHeader?.toString()) {
+                    "Harvest event missing acceptHeader"
                 }
                 
                 val report = harvestService.executeHarvest(
@@ -82,15 +81,63 @@ open class KafkaHarvestEventCircuitBreaker(
                 // Emit HARVESTING phase event after completion so counts are included.
                 harvestEventProducer.produceHarvestingEvent(event, report)
             }
-
             LOGGER.debug("Successfully processed harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}")
         } catch (e: IllegalArgumentException) {
             LOGGER.error("${e.message}, skipping")
+            // Validation problem with the incoming event – report as a user-friendly failure.
+            val errorMessage = HarvestErrorMessageMapper.toUserMessage(
+                category = HarvestErrorCategory.VALIDATION_ERROR,
+                dataSourceUrl = event.dataSourceUrl?.toString(),
+                dataType = event.dataType,
+            )
+            // We do not have a HarvestReport here, so emit an event directly with the mapped message.
+            event.runId?.toString()?.let { runId ->
+                harvestEventProducer.produceHarvestingEvent(
+                    runId = runId,
+                    dataType = event.dataType,
+                    dataSourceId = dataSourceIdOrNull(event),
+                    dataSourceUrl = event.dataSourceUrl?.toString() ?: "",
+                    startTime = null,
+                    endTime = null,
+                    errorMessage = errorMessage,
+                    changedResourcesCount = 0,
+                    removedResourcesCount = 0
+                )
+            }
         } catch (e: Exception) {
             LOGGER.error("Error processing harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}", e)
+
+            val category = when (e) {
+                is IllegalStateException -> HarvestErrorCategory.SOURCE_NOT_FOUND
+                else -> HarvestErrorCategory.INTERNAL_ERROR
+            }
+
+            val errorMessage = HarvestErrorMessageMapper.toUserMessage(
+                category = category,
+                dataSourceUrl = event.dataSourceUrl?.toString(),
+                dataType = event.dataType,
+            )
+
+            event.runId?.toString()?.let { runId ->
+                harvestEventProducer.produceHarvestingEvent(
+                    runId = runId,
+                    dataType = event.dataType,
+                    dataSourceId = dataSourceIdOrNull(event),
+                    dataSourceUrl = event.dataSourceUrl?.toString() ?: "",
+                    startTime = null,
+                    endTime = null,
+                    errorMessage = errorMessage,
+                    changedResourcesCount = 0,
+                    removedResourcesCount = 0
+                )
+            }
+
             throw e
         }
     }
+
+    private fun dataSourceIdOrNull(event: HarvestEvent): String =
+        event.dataSourceId?.toString() ?: ""
 
     companion object {
         private val LOGGER: Logger = LoggerFactory.getLogger(KafkaHarvestEventCircuitBreaker::class.java)
