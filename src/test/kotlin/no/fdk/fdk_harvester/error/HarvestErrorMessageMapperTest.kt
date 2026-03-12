@@ -29,7 +29,7 @@ class HarvestErrorMessageMapperTest {
         )
 
         assertTrue(msg.contains(url))
-        assertTrue(msg.contains("could not contact", ignoreCase = true))
+        assertTrue(msg.contains("Unable to harvest data from", ignoreCase = true))
     }
 
     @Test

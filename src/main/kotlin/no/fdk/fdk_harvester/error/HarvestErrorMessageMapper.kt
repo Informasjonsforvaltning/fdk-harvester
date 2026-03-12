@@ -15,13 +15,14 @@ object HarvestErrorMessageMapper {
         category: HarvestErrorCategory,
         dataSourceUrl: String? = null,
         dataType: DataType? = null,
+        originalError: String? = null,
     ): String =
         when (category) {
             HarvestErrorCategory.VALIDATION_ERROR ->
                 "This harvest could not start because required information is missing or invalid."
 
             HarvestErrorCategory.SOURCE_UNAVAILABLE ->
-                "We could not contact the data source${urlFragment(dataSourceUrl)}. Please check that the service is available and try again."
+                "Unable to harvest data from the source${urlFragment(dataSourceUrl)}. Original error message: '$originalError'. Please remedy and/or check that the service is available and try again."
 
             HarvestErrorCategory.SOURCE_NOT_FOUND ->
                 "The configured data source${urlFragment(dataSourceUrl)} was not found. It may have been removed or misconfigured."

@@ -165,7 +165,8 @@ abstract class BaseHarvester(
                 errorMessage = HarvestErrorMessageMapper.toUserMessage(
                     category = category,
                     dataSourceUrl = source.url,
-                    dataType = null
+                    dataType = null,
+                    originalError = ex.message
                 ),
                 harvestDate = harvestDate,
                 runId = runId
