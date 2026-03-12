@@ -12,10 +12,8 @@ import org.apache.jena.rdf.model.Model
 import org.apache.jena.riot.Lang
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.springframework.data.repository.findByIdOrNull
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
-import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
@@ -25,7 +23,7 @@ import java.time.Instant
 import java.util.*
 
 private const val TEN_MINUTES = 600000
-private const val MAX_CONTENT_SIZE = 10 * 1024 * 1024 // 10MB
+private const val MAX_CONTENT_SIZE = 75 * 1024 * 1024 // 75MB
 
 /**
  * Base harvester: fetches RDF from a [HarvestDataSource], parses it, and delegates type-specific
@@ -252,7 +250,7 @@ private fun InputStream.readWithSizeLimit(charset: Charset): String {
     val result = ByteArrayOutputStream(MAX_CONTENT_SIZE)
     var totalBytesRead = 0L
 
-    try {
+    use {
         while (true) {
             val bytesRead = this.read(byteBuffer)
             if (bytesRead == -1) break
@@ -265,8 +263,6 @@ private fun InputStream.readWithSizeLimit(charset: Charset): String {
 
             result.write(byteBuffer, 0, bytesRead)
         }
-    } finally {
-        this.close()
     }
 
     return String(result.toByteArray(), charset)
