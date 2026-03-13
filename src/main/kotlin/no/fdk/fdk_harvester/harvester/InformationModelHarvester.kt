@@ -101,7 +101,7 @@ class InformationModelHarvester(
         // Mark models as removed if they were harvested from this source but are no longer present
         val modelsFromThisSource = resourceRepository.findAllByType(ResourceType.INFORMATIONMODEL)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed }
-        val currentModelUris = updatedModels.map { it.uri }.toSet()
+        val currentModelUris = catalogPairs.flatMap { it.first.models.map { m -> m.resourceURI } }.toSet()
         removedModels.addAll(
             modelsFromThisSource.filter { !currentModelUris.contains(it.uri) }
         )

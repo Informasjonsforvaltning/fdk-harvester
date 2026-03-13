@@ -98,11 +98,11 @@ class DatasetHarvester(
                     }
                 }
             }
-        
+
         // Mark datasets as removed if they were harvested from this source but are no longer present
         val datasetsFromThisSource = resourceRepository.findAllByType(ResourceType.DATASET)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed }
-        val currentDatasetUris = updatedDatasets.map { it.uri }.toSet()
+        val currentDatasetUris = catalogPairs.flatMap { it.first.datasets.map { ds -> ds.resource.uri } }.toSet()
         removedDatasets.addAll(
             datasetsFromThisSource.filter { !currentDatasetUris.contains(it.uri) }
         )
