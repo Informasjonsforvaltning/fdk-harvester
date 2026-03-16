@@ -1,5 +1,6 @@
 package no.fdk.fdk_harvester.kafka
 
+import com.fasterxml.jackson.module.kotlin.kotlinModule
 import io.mockk.*
 import no.fdk.fdk_harvester.model.FdkIdAndUri
 import no.fdk.fdk_harvester.model.HarvestReport
@@ -182,6 +183,137 @@ class KafkaHarvestEventCircuitBreakerTest {
     }
 
     @Test
+    fun `process REMOVING phase delegates to markResourceAsDeletedByFdkId and publishes events`() {
+        val event = createRemovingEvent(DataType.dataset, "source-1", "http://example.org/source", fdkId = "fdk-123")
+        val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
+        val report = HarvestReport(
+            runId = "run-123",
+            dataSourceId = "source-1",
+            dataSourceUrl = "http://example.org/source",
+            dataType = "dataset",
+            harvestError = false,
+            startTime = "2024-01-01T00:00:00+01:00",
+            endTime = "2024-01-01T00:01:00+01:00",
+            removedResources = listOf(FdkIdAndUri("fdk-123", "http://example.org/resource1"))
+        )
+
+        every { harvestService.markResourceAsDeletedByFdkId(any(), any(), any(), any(), any()) } returns report
+
+        circuitBreaker.process(record)
+
+        verify { harvestService.markResourceAsDeletedByFdkId(
+            fdkId = "fdk-123",
+            uri = "fdk-123",
+            dataType = DataType.dataset,
+            runId = "run-123",
+            dataSourceId = "source-1"
+        ) }
+        verify { resourceEventProducer.publishRemovedEvents(
+            dataType = DataType.dataset,
+            resources = report.removedResources,
+            runId = "run-123"
+        ) }
+        verify { harvestEventProducer.produceHarvestingEvent(event, report) }
+    }
+
+    @Test
+    fun `process REMOVING phase with missing fdkId catches IllegalArgumentException and produces error event`() {
+        val event = HarvestEvent.newBuilder()
+            .setPhase(HarvestPhase.REMOVING)
+            .setRunId("run-123")
+            .setDataType(DataType.concept)
+            .setDataSourceId("source-1")
+            .setDataSourceUrl("http://example.org/source")
+            .setFdkId(null)
+            .build()
+        val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
+
+        circuitBreaker.process(record)
+
+        verify(exactly = 0) { harvestService.markResourceAsDeletedByFdkId(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `process REMOVING phase with missing runId catches IllegalArgumentException and produces error event`() {
+        val event = HarvestEvent.newBuilder()
+            .setPhase(HarvestPhase.REMOVING)
+            .setRunId(null)
+            .setDataType(DataType.concept)
+            .setDataSourceId("source-1")
+            .setDataSourceUrl("http://example.org/source")
+            .setFdkId("fdk-123")
+            .build()
+        val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
+
+        circuitBreaker.process(record)
+
+        verify(exactly = 0) { harvestService.markResourceAsDeletedByFdkId(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `process REMOVING phase with missing dataSourceId catches IllegalArgumentException`() {
+        val event = HarvestEvent.newBuilder()
+            .setPhase(HarvestPhase.REMOVING)
+            .setRunId("run-123")
+            .setDataType(DataType.concept)
+            .setDataSourceId(null)
+            .setDataSourceUrl("http://example.org/source")
+            .setFdkId("fdk-123")
+            .build()
+        val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
+
+        circuitBreaker.process(record)
+
+        verify(exactly = 0) { harvestService.markResourceAsDeletedByFdkId(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `process REMOVING phase handles exception from harvest service`() {
+        val event = createRemovingEvent(DataType.dataset, "source-1", "http://example.org/source", fdkId = "fdk-123")
+        val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
+
+        every { harvestService.markResourceAsDeletedByFdkId(any(), any(), any(), any(), any()) } throws RuntimeException("DB error")
+
+        assertThrows(RuntimeException::class.java) {
+            circuitBreaker.process(record)
+        }
+
+        verify { harvestService.markResourceAsDeletedByFdkId(any(), any(), any(), any(), any()) }
+    }
+
+    @Test
+    fun `process REMOVING phase for different data types`() {
+        for (dataType in listOf(DataType.concept, DataType.dataset, DataType.dataservice, DataType.informationmodel, DataType.service, DataType.event)) {
+            clearAllMocks()
+
+            val event = createRemovingEvent(dataType, "source-1", "http://example.org/source", fdkId = "fdk-456")
+            val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
+            val report = HarvestReport(
+                runId = "run-123",
+                dataSourceId = "source-1",
+                dataSourceUrl = "http://example.org/source",
+                dataType = dataType.name.lowercase(),
+                harvestError = false,
+                startTime = "2024-01-01T00:00:00+01:00",
+                endTime = "2024-01-01T00:01:00+01:00",
+                removedResources = listOf(FdkIdAndUri("fdk-456", "http://example.org/resource"))
+            )
+
+            every { harvestService.markResourceAsDeletedByFdkId(any(), any(), any(), any(), any()) } returns report
+
+            circuitBreaker.process(record)
+
+            verify { harvestService.markResourceAsDeletedByFdkId(
+                fdkId = "fdk-456",
+                uri = "fdk-456",
+                dataType = dataType,
+                runId = "run-123",
+                dataSourceId = "source-1"
+            ) }
+        }
+    }
+
+    @Test
     fun `process handles removeAll=true and marks resources as deleted`() {
         val event = createHarvestEvent(DataType.dataset, "source-1", "http://example.org/source", removeAll = true)
         val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
@@ -251,6 +383,23 @@ class KafkaHarvestEventCircuitBreakerTest {
             .setAcceptHeader("text/turtle")
             .setForced(forced)
             .setRemoveAll(removeAll)
+            .build()
+    }
+
+    private fun createRemovingEvent(
+        dataType: DataType,
+        dataSourceId: String,
+        dataSourceUrl: String,
+        fdkId: String,
+        runId: String = "run-123"
+    ): HarvestEvent {
+        return HarvestEvent.newBuilder()
+            .setPhase(HarvestPhase.REMOVING)
+            .setRunId(runId)
+            .setDataType(dataType)
+            .setDataSourceId(dataSourceId)
+            .setDataSourceUrl(dataSourceUrl)
+            .setFdkId(fdkId)
             .build()
     }
 

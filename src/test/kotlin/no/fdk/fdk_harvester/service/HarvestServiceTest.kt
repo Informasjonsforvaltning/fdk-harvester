@@ -405,6 +405,101 @@ class HarvestServiceTest {
     }
 
     @Test
+    fun `markResourceAsDeletedByFdkId marks resource and returns report`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val resource = ResourceEntity(
+            uri = "http://example.org/dataset1",
+            type = ResourceType.DATASET,
+            fdkId = "fdk-1",
+            removed = false,
+            issued = Instant.now(),
+            modified = Instant.now(),
+            checksum = "x",
+            harvestSource = source
+        )
+        every { resourceRepository.findAllByFdkId("fdk-1") } returns listOf(resource)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result = harvestService.markResourceAsDeletedByFdkId(
+            fdkId = "fdk-1",
+            uri = "http://example.org/dataset1",
+            dataType = DataType.dataset,
+            runId = "run-1",
+            dataSourceId = "ds-1"
+        )
+
+        assertEquals("run-1", result.runId)
+        assertEquals("ds-1", result.dataSourceId)
+        assertEquals("dataset", result.dataType)
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-1", result.removedResources[0].fdkId)
+        assertEquals("http://example.org/dataset1", result.removedResources[0].uri)
+
+        val saveSlot = slot<ResourceEntity>()
+        verify(exactly = 1) { resourceRepository.save(capture(saveSlot)) }
+        assertTrue(saveSlot.captured.removed)
+    }
+
+    @Test
+    fun `markResourceAsDeletedByFdkId when no resources found returns report with fdkId`() {
+        every { resourceRepository.findAllByFdkId("fdk-999") } returns emptyList()
+
+        val result = harvestService.markResourceAsDeletedByFdkId(
+            fdkId = "fdk-999",
+            uri = "http://example.org/missing",
+            dataType = DataType.concept,
+            runId = "run-1",
+            dataSourceId = "ds-1"
+        )
+
+        assertEquals("run-1", result.runId)
+        assertEquals("ds-1", result.dataSourceId)
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-999", result.removedResources[0].fdkId)
+        assertEquals("http://example.org/missing", result.removedResources[0].uri)
+        verify(exactly = 0) { resourceRepository.save(any<ResourceEntity>()) }
+    }
+
+    @Test
+    fun `markResourceAsDeletedByFdkId with multiple resources marks all`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val resource1 = ResourceEntity(
+            uri = "http://example.org/dataset1",
+            type = ResourceType.DATASET,
+            fdkId = "fdk-1",
+            removed = false,
+            issued = Instant.now(),
+            modified = Instant.now(),
+            checksum = "x",
+            harvestSource = source
+        )
+        val resource2 = ResourceEntity(
+            uri = "http://example.org/dataset2",
+            type = ResourceType.DATASET,
+            fdkId = "fdk-1",
+            removed = false,
+            issued = Instant.now(),
+            modified = Instant.now(),
+            checksum = "y",
+            harvestSource = source
+        )
+        every { resourceRepository.findAllByFdkId("fdk-1") } returns listOf(resource1, resource2)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result = harvestService.markResourceAsDeletedByFdkId(
+            fdkId = "fdk-1",
+            uri = "http://example.org/dataset1",
+            dataType = DataType.dataset,
+            runId = "run-1",
+            dataSourceId = "ds-1"
+        )
+
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-1", result.removedResources[0].fdkId)
+        verify(exactly = 2) { resourceRepository.save(any<ResourceEntity>()) }
+    }
+
+    @Test
     fun `markResourcesAsDeleted skips already removed resources`() {
         val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
         val removedResource = ResourceEntity(

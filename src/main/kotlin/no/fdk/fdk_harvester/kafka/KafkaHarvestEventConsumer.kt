@@ -35,8 +35,8 @@ class KafkaHarvestEventConsumer(
         val event = record.value()
         
         // Only process INITIATING phase events
-        if (event.phase != HarvestPhase.INITIATING) {
-            logger().debug("Skipping harvest event with phase: ${event.phase}")
+        if (event.phase != HarvestPhase.INITIATING && event.phase != HarvestPhase.REMOVING) {
+            logger().debug("Skipping harvest event with phase: {}", event.phase)
             ack.acknowledge()
             return
         }

@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 data class HarvestReport(
     val runId: String,
     val dataSourceId: String,
-    val dataSourceUrl: String,
+    val dataSourceUrl: String?,
     val dataType: String,
     val harvestError: Boolean,
     val startTime: String,
