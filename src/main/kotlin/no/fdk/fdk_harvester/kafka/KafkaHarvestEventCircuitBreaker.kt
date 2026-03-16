@@ -27,61 +27,18 @@ open class KafkaHarvestEventCircuitBreaker(
     @CircuitBreaker(name = CIRCUIT_BREAKER_ID)
     override fun process(record: ConsumerRecord<String, HarvestEvent>) {
         val event = record.value()
-        if (event.phase != HarvestPhase.INITIATING) {
-            LOGGER.debug("Ignoring harvest event with phase: ${event.phase} (only INITIATING is processed)")
-            return
-        }
 
         LOGGER.debug("Processing harvest event - offset: ${record.offset()}, partition: ${record.partition()}")
 
         try {
-            val runId = requireNotNull(event.runId?.toString()) { "Harvest event missing runId" }
-            val dataSourceId = requireNotNull(event.dataSourceId?.toString()) { 
-                "Harvest event missing dataSourceId" 
-            }
-            val dataSourceUrl = requireNotNull(event.dataSourceUrl?.toString()) { 
-                "Harvest event missing dataSourceUrl" 
-            }
-            
-            if (event.removeAll == true) {
-                val report = harvestService.markResourcesAsDeleted(
-                    sourceUrl = dataSourceUrl,
-                    dataType = event.dataType,
-                    dataSourceId = dataSourceId,
-                    runId = runId
-                )
-
-                LOGGER.info("Successfully marked ${report.removedResources.size} resources as deleted for dataSourceUrl: $dataSourceUrl")
-                
-                // Publish removed resource events
-                if (report.removedResources.isNotEmpty()) {
-                    resourceEventProducer.publishRemovedEvents(
-                        dataType = event.dataType,
-                        resources = report.removedResources,
-                        runId = runId
-                    )
+            when (event.phase) {
+                HarvestPhase.INITIATING if event.removeAll != true -> initiateHarvest(event)
+                HarvestPhase.INITIATING if event.removeAll == true -> removeAllResourcesFromSource(event)
+                HarvestPhase.REMOVING -> removeSingleResource(event)
+                else -> {
+                    LOGGER.debug("Ignoring harvest event with phase: {} (only INITIATING & REMOVING is processed)", event.phase)
                 }
-                
-                // Emit HARVESTING phase event after completion so counts are included.
-                harvestEventProducer.produceHarvestingEvent(event, report)
-            } else {
-                val acceptHeader = requireNotNull(event.acceptHeader?.toString()) {
-                    "Harvest event missing acceptHeader"
-                }
-                
-                val report = harvestService.executeHarvest(
-                    dataSourceId = dataSourceId,
-                    dataSourceUrl = dataSourceUrl,
-                    dataType = event.dataType,
-                    acceptHeader = acceptHeader,
-                    runId = runId,
-                    forced = event.forced ?: false
-                )
-                
-                // Emit HARVESTING phase event after completion so counts are included.
-                harvestEventProducer.produceHarvestingEvent(event, report)
             }
-            LOGGER.debug("Successfully processed harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}")
         } catch (e: IllegalArgumentException) {
             LOGGER.error("${e.message}, skipping")
             // Validation problem with the incoming event – report as a user-friendly failure.
@@ -134,6 +91,103 @@ open class KafkaHarvestEventCircuitBreaker(
 
             throw e
         }
+    }
+
+    private fun initiateHarvest(event: HarvestEvent) {
+        val runId = requireNotNull(event.runId?.toString()) { "Harvest event missing runId" }
+        val dataSourceId = requireNotNull(event.dataSourceId?.toString()) {
+            "Harvest event missing dataSourceId"
+        }
+        val dataSourceUrl = requireNotNull(event.dataSourceUrl?.toString()) {
+            "Harvest event missing dataSourceUrl"
+        }
+
+        val acceptHeader = requireNotNull(event.acceptHeader?.toString()) {
+            "Harvest event missing acceptHeader"
+        }
+
+        val report = harvestService.executeHarvest(
+            dataSourceId = dataSourceId,
+            dataSourceUrl = dataSourceUrl,
+            dataType = event.dataType,
+            acceptHeader = acceptHeader,
+            runId = runId,
+            forced = event.forced ?: false
+        )
+
+        // Emit HARVESTING phase event after completion so counts are included.
+        harvestEventProducer.produceHarvestingEvent(event, report)
+        LOGGER.debug(
+            "Successfully processed harvest event for dataSourceId: {}, dataType: {}",
+            event.dataSourceId,
+            event.dataType
+        )
+
+    }
+
+    private fun removeAllResourcesFromSource(event: HarvestEvent) {
+        val runId = requireNotNull(event.runId?.toString()) { "RemoveAll event missing runId" }
+        val dataSourceId = requireNotNull(event.dataSourceId?.toString()) {
+            "RemoveAll event missing dataSourceId"
+        }
+        val dataSourceUrl = requireNotNull(event.dataSourceUrl?.toString()) {
+            "RemoveAll event missing dataSourceUrl"
+        }
+
+        val report = harvestService.markResourcesAsDeleted(
+            sourceUrl = dataSourceUrl,
+            dataType = event.dataType,
+            dataSourceId = dataSourceId,
+            runId = runId
+        )
+
+        LOGGER.info("Successfully marked ${report.removedResources.size} resources as deleted for dataSourceUrl: $dataSourceUrl")
+
+        // Publish removed resource events
+        if (report.removedResources.isNotEmpty()) {
+            resourceEventProducer.publishRemovedEvents(
+                dataType = event.dataType,
+                resources = report.removedResources,
+                runId = runId
+            )
+        }
+
+        // Emit HARVESTING phase event after completion so counts are included.
+        harvestEventProducer.produceHarvestingEvent(event, report)
+
+        LOGGER.debug(
+            "Successfully processed removeAll event for dataSourceId: {}, dataType: {}",
+            event.dataSourceId,
+            event.dataType
+        )
+    }
+
+    private fun removeSingleResource(event: HarvestEvent) {
+        val runId = requireNotNull(event.runId?.toString()) { "Remove event missing runId" }
+        val fdkId = requireNotNull(event.fdkId?.toString()) { "Remove event missing fdkId" }
+        val uri = requireNotNull(event.fdkId?.toString()) { "Remove event missing uri" }
+        val dataSourceId = requireNotNull(event.dataSourceId?.toString()) {
+            "Remove event missing dataSourceId"
+        }
+
+        val report = harvestService.markResourceAsDeletedByFdkId(
+            fdkId = fdkId,
+            uri = uri,
+            dataType = event.dataType,
+            runId = runId,
+            dataSourceId = dataSourceId
+        )
+
+        // Publish removed resource event
+        resourceEventProducer.publishRemovedEvents(
+            dataType = event.dataType,
+            resources = report.removedResources,
+            runId = runId
+        )
+
+        // Emit HARVESTING phase event after completion so counts are included.
+        harvestEventProducer.produceHarvestingEvent(event, report)
+
     }
 
     private fun dataSourceIdOrNull(event: HarvestEvent): String =

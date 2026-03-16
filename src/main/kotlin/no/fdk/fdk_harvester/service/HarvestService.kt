@@ -182,6 +182,54 @@ open class HarvestService(
         )
     }
 
+    @Transactional
+    override fun markResourceAsDeletedByFdkId(
+        fdkId: String,
+        uri: String,
+        dataType: DataType,
+        runId: String,
+        dataSourceId: String
+    ): HarvestReport {
+        logger().info("Marking resource as deleted for fdkId: $fdkId")
+
+        val harvestDate = Calendar.getInstance()
+        val resourcesToUpdate = resourceRepository.findAllByFdkId(fdkId)
+
+        if (resourcesToUpdate.isNotEmpty()) {
+            val now = Instant.now()
+            val updatedResources = resourcesToUpdate.map { resource ->
+                // Since ResourceEntity uses val properties, we need to create a new instance
+                // JPA will handle the update based on the @Id (uri)
+                val updated = ResourceEntity(
+                    uri = resource.uri,
+                    type = resource.type,
+                    fdkId = resource.fdkId,
+                    removed = true,
+                    issued = resource.issued,
+                    modified = now,
+                    checksum = resource.checksum,
+                    harvestSource = resource.harvestSource
+                )
+                resourceRepository.save(updated)
+                updated
+            }
+
+            logger().info("Marked ${updatedResources.size} resources as deleted for fdkId: $fdkId")
+        }
+
+        // Create a report for the remove operation
+        return HarvestReportBuilder.createSuccessReport(
+            dataType = dataType.name.lowercase(),
+            sourceId = dataSourceId,
+            sourceUrl = null,
+            harvestDate = harvestDate,
+            changedCatalogs = emptyList(),
+            changedResources = emptyList(),
+            removedResources = listOf(FdkIdAndUri(fdkId = fdkId, uri = uri)),
+            runId = runId
+        )
+    }
+
     /**
      * Checks if a ResourceType matches the given DataType.
      * CATALOG and COLLECTION are metadata types and don't match any DataType.

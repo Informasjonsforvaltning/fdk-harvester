@@ -11,7 +11,7 @@ object HarvestReportBuilder {
     fun createSuccessReport(
         dataType: String,
         sourceId: String,
-        sourceUrl: String,
+        sourceUrl: String?,
         harvestDate: Calendar,
         changedCatalogs: List<FdkIdAndUri>,
         changedResources: List<FdkIdAndUri>,

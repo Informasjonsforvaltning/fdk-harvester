@@ -24,5 +24,13 @@ interface HarvestServiceApi {
         dataSourceId: String,
         runId: String,
     ): no.fdk.fdk_harvester.model.HarvestReport
+
+    fun markResourceAsDeletedByFdkId(
+        fdkId: String,
+        uri: String,
+        dataType: DataType,
+        runId: String,
+        dataSourceId: String
+    ): no.fdk.fdk_harvester.model.HarvestReport
 }
 
