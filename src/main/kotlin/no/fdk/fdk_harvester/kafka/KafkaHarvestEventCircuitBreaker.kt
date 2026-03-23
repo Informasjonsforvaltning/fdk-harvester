@@ -1,6 +1,6 @@
 package no.fdk.fdk_harvester.kafka
 
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
+import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import no.fdk.fdk_harvester.error.HarvestErrorCategory
 import no.fdk.fdk_harvester.error.HarvestErrorMessageMapper
 import no.fdk.fdk_harvester.service.HarvestServiceApi
@@ -9,6 +9,7 @@ import no.fdk.harvest.HarvestPhase
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
 
 /**
@@ -22,74 +23,83 @@ open class KafkaHarvestEventCircuitBreaker(
     private val harvestService: HarvestServiceApi,
     private val harvestEventProducer: HarvestEventProducer,
     private val resourceEventProducer: ResourceEventProducer,
+    @param:Qualifier("harvesterCircuitBreaker")
+    private val circuitBreaker: CircuitBreaker,
 ) : KafkaHarvestEventCircuitBreakerApi {
 
-    @CircuitBreaker(name = CIRCUIT_BREAKER_ID)
     override fun process(record: ConsumerRecord<String, HarvestEvent>) {
-        val event = record.value()
+        circuitBreaker.executeRunnable {
+            val event = record.value()
 
-        LOGGER.debug("Processing harvest event - offset: ${record.offset()}, partition: ${record.partition()}")
+            LOGGER.debug("Processing harvest event - offset: ${record.offset()}, partition: ${record.partition()}")
 
-        try {
-            when (event.phase) {
-                HarvestPhase.INITIATING if event.removeAll != true -> initiateHarvest(event)
-                HarvestPhase.INITIATING if event.removeAll == true -> removeAllResourcesFromSource(event)
-                HarvestPhase.REMOVING -> removeSingleResource(event)
-                else -> {
-                    LOGGER.debug("Ignoring harvest event with phase: {} (only INITIATING & REMOVING is processed)", event.phase)
+            try {
+                when (event.phase) {
+                    HarvestPhase.INITIATING if event.removeAll != true -> initiateHarvest(event)
+                    HarvestPhase.INITIATING if event.removeAll == true -> removeAllResourcesFromSource(event)
+                    HarvestPhase.REMOVING -> removeSingleResource(event)
+                    else -> {
+                        LOGGER.debug(
+                            "Ignoring harvest event with phase: {} (only INITIATING & REMOVING is processed)",
+                            event.phase
+                        )
+                    }
                 }
-            }
-        } catch (e: IllegalArgumentException) {
-            LOGGER.error("${e.message}, skipping")
-            // Validation problem with the incoming event – report as a user-friendly failure.
-            val errorMessage = HarvestErrorMessageMapper.toUserMessage(
-                category = HarvestErrorCategory.VALIDATION_ERROR,
-                dataSourceUrl = event.dataSourceUrl?.toString(),
-                dataType = event.dataType,
-            )
-            // We do not have a HarvestReport here, so emit an event directly with the mapped message.
-            event.runId?.toString()?.let { runId ->
-                harvestEventProducer.produceHarvestingEvent(
-                    runId = runId,
+            } catch (e: IllegalArgumentException) {
+                LOGGER.error("${e.message}, skipping")
+                // Validation problem with the incoming event – report as a user-friendly failure.
+                val errorMessage = HarvestErrorMessageMapper.toUserMessage(
+                    category = HarvestErrorCategory.VALIDATION_ERROR,
+                    dataSourceUrl = event.dataSourceUrl?.toString(),
                     dataType = event.dataType,
-                    dataSourceId = dataSourceIdOrNull(event),
-                    dataSourceUrl = event.dataSourceUrl?.toString() ?: "",
-                    startTime = null,
-                    endTime = null,
-                    errorMessage = errorMessage,
-                    changedResourcesCount = 0,
-                    removedResourcesCount = 0
                 )
-            }
-        } catch (e: Exception) {
-            LOGGER.error("Error processing harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}", e)
+                // We do not have a HarvestReport here, so emit an event directly with the mapped message.
+                event.runId?.toString()?.let { runId ->
+                    harvestEventProducer.produceHarvestingEvent(
+                        runId = runId,
+                        dataType = event.dataType,
+                        dataSourceId = dataSourceIdOrNull(event),
+                        dataSourceUrl = event.dataSourceUrl?.toString() ?: "",
+                        startTime = null,
+                        endTime = null,
+                        errorMessage = errorMessage,
+                        changedResourcesCount = 0,
+                        removedResourcesCount = 0
+                    )
+                }
+            } catch (e: Exception) {
+                LOGGER.error(
+                    "Error processing harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}",
+                    e
+                )
 
-            val category = when (e) {
-                is IllegalStateException -> HarvestErrorCategory.SOURCE_NOT_FOUND
-                else -> HarvestErrorCategory.INTERNAL_ERROR
-            }
+                val category = when (e) {
+                    is IllegalStateException -> HarvestErrorCategory.SOURCE_NOT_FOUND
+                    else -> HarvestErrorCategory.INTERNAL_ERROR
+                }
 
-            val errorMessage = HarvestErrorMessageMapper.toUserMessage(
-                category = category,
-                dataSourceUrl = event.dataSourceUrl?.toString(),
-                dataType = event.dataType,
-            )
-
-            event.runId?.toString()?.let { runId ->
-                harvestEventProducer.produceHarvestingEvent(
-                    runId = runId,
+                val errorMessage = HarvestErrorMessageMapper.toUserMessage(
+                    category = category,
+                    dataSourceUrl = event.dataSourceUrl?.toString(),
                     dataType = event.dataType,
-                    dataSourceId = dataSourceIdOrNull(event),
-                    dataSourceUrl = event.dataSourceUrl?.toString() ?: "",
-                    startTime = null,
-                    endTime = null,
-                    errorMessage = errorMessage,
-                    changedResourcesCount = 0,
-                    removedResourcesCount = 0
                 )
-            }
 
-            throw e
+                event.runId?.toString()?.let { runId ->
+                    harvestEventProducer.produceHarvestingEvent(
+                        runId = runId,
+                        dataType = event.dataType,
+                        dataSourceId = dataSourceIdOrNull(event),
+                        dataSourceUrl = event.dataSourceUrl?.toString() ?: "",
+                        startTime = null,
+                        endTime = null,
+                        errorMessage = errorMessage,
+                        changedResourcesCount = 0,
+                        removedResourcesCount = 0
+                    )
+                }
+
+                throw e
+            }
         }
     }
 
@@ -195,6 +205,5 @@ open class KafkaHarvestEventCircuitBreaker(
 
     companion object {
         private val LOGGER: Logger = LoggerFactory.getLogger(KafkaHarvestEventCircuitBreaker::class.java)
-        const val CIRCUIT_BREAKER_ID = "harvest-cb"
     }
 }
