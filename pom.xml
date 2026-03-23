@@ -14,7 +14,7 @@
     <parent>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-parent</artifactId>
-      <version>4.0.1</version>
+      <version>4.0.4</version>
       <relativePath/>
     </parent>
 
@@ -29,11 +29,11 @@
         <maven.exec.skip>false</maven.exec.skip>
         <!--end standard properties-->
 
-        <kotlin.version>2.3.0</kotlin.version>
-        <testcontainers.version>2.0.3</testcontainers.version>
-        <jena.version>5.6.0</jena.version>
+        <kotlin.version>2.3.20</kotlin.version>
+        <testcontainers.version>2.0.4</testcontainers.version>
+        <jena.version>6.0.0</jena.version>
         <avro.version>1.12.1</avro.version>
-        <confluent.version>8.1.1</confluent.version>
+        <confluent.version>8.2.0</confluent.version>
     </properties>
 
     <repositories>
@@ -156,7 +156,7 @@
         <!-- Resilience4j -->
         <dependency>
             <groupId>io.github.resilience4j</groupId>
-            <artifactId>resilience4j-spring-boot3</artifactId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
             <version>2.3.0</version>
         </dependency>
 
@@ -208,13 +208,13 @@
         <dependency>
             <groupId>io.mockk</groupId>
             <artifactId>mockk-jvm</artifactId>
-            <version>1.13.11</version>
+            <version>1.14.9</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.wiremock</groupId>
             <artifactId>wiremock-standalone</artifactId>
-            <version>3.13.1</version>
+            <version>3.13.2</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -433,7 +433,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.5</version>
                 <configuration>
                     <useSystemClassLoader>false</useSystemClassLoader>
                     <!--suppress UnresolvedMavenProperty -->
@@ -449,7 +449,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.5</version>
                 <configuration>
                     <!--suppress UnresolvedMavenProperty -->
                     <argLine>${failsafe.jacoco.args}</argLine>

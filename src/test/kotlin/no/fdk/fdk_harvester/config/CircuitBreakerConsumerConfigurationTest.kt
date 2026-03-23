@@ -4,7 +4,7 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import io.mockk.mockk
 import io.mockk.verify
-import no.fdk.fdk_harvester.kafka.KafkaHarvestEventCircuitBreaker
+import no.fdk.fdk_harvester.config.CircuitBreakerConsumerConfiguration.Companion.CIRCUIT_BREAKER_ID
 import no.fdk.fdk_harvester.kafka.KafkaManager
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Tag
@@ -27,10 +27,10 @@ class CircuitBreakerConsumerConfigurationTest {
             .build()
 
         val registry = CircuitBreakerRegistry.of(cbConfig)
-        val cb = registry.circuitBreaker(KafkaHarvestEventCircuitBreaker.CIRCUIT_BREAKER_ID)
+        val cb = registry.circuitBreaker(CIRCUIT_BREAKER_ID)
 
-        // registers the onStateTransition listener in init { ... }
-        CircuitBreakerConsumerConfiguration(registry, kafkaManager)
+        val config = CircuitBreakerConsumerConfiguration(kafkaManager)
+        config.registerListeners(registry)
 
         repeat(2) {
             try {
@@ -49,9 +49,10 @@ class CircuitBreakerConsumerConfigurationTest {
         val kafkaManager = mockk<KafkaManager>(relaxed = true)
 
         val registry = CircuitBreakerRegistry.ofDefaults()
-        val cb = registry.circuitBreaker(KafkaHarvestEventCircuitBreaker.CIRCUIT_BREAKER_ID)
+        val cb = registry.circuitBreaker(CIRCUIT_BREAKER_ID)
 
-        CircuitBreakerConsumerConfiguration(registry, kafkaManager)
+        val config = CircuitBreakerConsumerConfiguration(kafkaManager)
+        config.registerListeners(registry)
 
         cb.transitionToOpenState()
         cb.transitionToHalfOpenState()

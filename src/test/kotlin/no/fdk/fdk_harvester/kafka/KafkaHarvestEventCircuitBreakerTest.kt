@@ -1,6 +1,6 @@
 package no.fdk.fdk_harvester.kafka
 
-import com.fasterxml.jackson.module.kotlin.kotlinModule
+import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.mockk.*
 import no.fdk.fdk_harvester.model.FdkIdAndUri
 import no.fdk.fdk_harvester.model.HarvestReport
@@ -29,7 +29,8 @@ class KafkaHarvestEventCircuitBreakerTest {
         circuitBreaker = KafkaHarvestEventCircuitBreaker(
             harvestService,
             harvestEventProducer,
-            resourceEventProducer
+            resourceEventProducer,
+            CircuitBreaker.ofDefaults("test-cb"),
         )
     }
 
