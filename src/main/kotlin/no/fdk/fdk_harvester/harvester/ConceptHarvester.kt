@@ -3,22 +3,24 @@ package no.fdk.fdk_harvester.harvester
 import no.fdk.fdk_harvester.adapter.DefaultOrganizationsAdapter
 import no.fdk.fdk_harvester.config.ApplicationProperties
 import no.fdk.fdk_harvester.kafka.ResourceEventProducer
-import no.fdk.fdk_harvester.model.*
-import no.fdk.fdk_harvester.rdf.*
+import no.fdk.fdk_harvester.model.FdkIdAndUri
+import no.fdk.fdk_harvester.model.HarvestDataSource
+import no.fdk.fdk_harvester.model.HarvestReport
+import no.fdk.fdk_harvester.model.HarvestSourceEntity
+import no.fdk.fdk_harvester.model.ResourceEntity
+import no.fdk.fdk_harvester.model.ResourceType
 import no.fdk.fdk_harvester.rdf.computeChecksum
-import no.fdk.fdk_harvester.harvester.formatNowWithOsloTimeZone
-import no.fdk.fdk_harvester.harvester.formatWithOsloTimeZone
+import no.fdk.fdk_harvester.rdf.createConceptCatalogRecordModel
+import no.fdk.fdk_harvester.rdf.createIdFromString
+import no.fdk.fdk_harvester.rdf.createRDFResponse
 import no.fdk.fdk_harvester.repository.HarvestSourceRepository
 import no.fdk.fdk_harvester.repository.ResourceRepository
-import no.fdk.harvest.DataType as HarvestDataType
 import org.apache.jena.rdf.model.Model
 import org.apache.jena.riot.Lang
-import org.slf4j.LoggerFactory
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.util.*
-
-private val LOGGER = LoggerFactory.getLogger(ConceptHarvester::class.java)
+import no.fdk.harvest.DataType as HarvestDataType
 
 /** Harvests concept collections from a SKOS/RDF source and publishes concept events. */
 @Service
@@ -30,7 +32,12 @@ class ConceptHarvester(
     harvestSourceRepository: HarvestSourceRepository
 ) : BaseHarvester(harvestSourceRepository) {
 
-    fun harvestConceptCollection(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+    fun harvestConceptCollection(
+        source: HarvestDataSource,
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        runId: String
+    ): HarvestReport? =
         validateAndHarvest(source, harvestDate, forceUpdate, runId, "concept", requiresAcceptHeader = true)
 
     override fun updateDB(
@@ -52,8 +59,14 @@ class ConceptHarvester(
         } else null
 
         val collections = splitCollectionsFromRDF(harvested, concepts, sourceURL, organization)
-        val (updatedCollections, conceptUriToCollectionFdkUri) = updateCollections(collections, harvestDate, forceUpdate, harvestSource)
-        val updatedConcepts = updateConcepts(concepts, harvestDate, forceUpdate, runId, harvestSource, conceptUriToCollectionFdkUri)
+        val (updatedCollections, conceptUriToCollectionFdkUri) = updateCollections(
+            collections,
+            harvestDate,
+            forceUpdate,
+            harvestSource
+        )
+        val updatedConcepts =
+            updateConcepts(concepts, harvestDate, forceUpdate, runId, harvestSource, conceptUriToCollectionFdkUri)
 
         val removedConcepts = getConceptsRemovedThisHarvest(
             concepts.map { it.resourceURI },
@@ -127,22 +140,37 @@ class ConceptHarvester(
         return updatedConcepts
     }
 
-    private fun ConceptRDFModel.updateDBOs(harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): ResourceEntity? {
-        val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
-        validateSourceUrl(resourceURI, harvestSource, dbMeta)
-        val harvestedChecksum = computeChecksum(harvested)
-        return when {
-            dbMeta == null || dbMeta.removed || conceptHasChanges(dbMeta, harvestedChecksum) -> {
-                val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
-                resourceRepository.save(updatedMeta)
-                updatedMeta
+    private fun ConceptRDFModel.updateDBOs(
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        harvestSource: HarvestSourceEntity
+    ): ResourceEntity? {
+        try {
+            val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
+            validateSourceUrl(resourceURI, harvestSource, dbMeta)
+            val harvestedChecksum = computeChecksum(harvested)
+            return when {
+                dbMeta == null || dbMeta.removed || conceptHasChanges(dbMeta, harvestedChecksum) -> {
+                    val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+                    resourceRepository.save(updatedMeta)
+                    updatedMeta
+                }
+
+                forceUpdate -> {
+                    val updatedMeta = dbMeta.copy(
+                        checksum = harvestedChecksum,
+                        modified = harvestDate.toInstant(),
+                        harvestSource = harvestSource
+                    )
+                    resourceRepository.save(updatedMeta)
+                    updatedMeta
+                }
+
+                else -> null
             }
-            forceUpdate -> {
-                val updatedMeta = dbMeta.copy(checksum = harvestedChecksum, modified = harvestDate.toInstant(), harvestSource = harvestSource)
-                resourceRepository.save(updatedMeta)
-                updatedMeta
-            }
-            else -> null
+        } catch (conflictError: HarvestSourceConflictException) {
+            logger.warn("Concept skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
+            return null
         }
     }
 
@@ -162,7 +190,7 @@ class ConceptHarvester(
                 conceptUriToCollectionFdkUri.putIfAbsent(conceptURI, collectionFdkUri)
             }
         }
-        // Validate source ownership for all collections before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        // Validate source ownership for all collections before filtering by change
         collections.forEach { coll ->
             validateSourceUrl(coll.resourceURI, harvestSource, resourceRepository.findByIdOrNull(coll.resourceURI))
         }
@@ -171,14 +199,17 @@ class ConceptHarvester(
             .filter { forceUpdate || it.first.collectionHasChanges(it.second, computeChecksum(it.first.harvested)) }
             .map {
                 val dbMeta = it.second
-                validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val collectionChecksum = computeChecksum(it.first.harvested)
                 val collectionMeta = if (dbMeta == null || it.first.collectionHasChanges(dbMeta, collectionChecksum)) {
                     it.first.mapToResource(harvestDate, dbMeta, collectionChecksum, harvestSource)
                         .also { updatedMeta -> resourceRepository.save(updatedMeta) }
                 } else {
                     if (forceUpdate) {
-                        dbMeta.copy(checksum = collectionChecksum, modified = harvestDate.toInstant(), harvestSource = harvestSource)
+                        dbMeta.copy(
+                            checksum = collectionChecksum,
+                            modified = harvestDate.toInstant(),
+                            harvestSource = harvestSource
+                        )
                             .also { resourceRepository.save(it) }
                     } else {
                         dbMeta
@@ -248,7 +279,10 @@ class ConceptHarvester(
         if (dbMeta == null) true
         else harvestedChecksum != dbMeta.checksum
 
-    private fun getConceptsRemovedThisHarvest(concepts: List<String>, harvestSource: HarvestSourceEntity): List<ResourceEntity> =
+    private fun getConceptsRemovedThisHarvest(
+        concepts: List<String>,
+        harvestSource: HarvestSourceEntity
+    ): List<ResourceEntity> =
         resourceRepository.findAllByType(ResourceType.CONCEPT)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed && !concepts.contains(it.uri) }
 }

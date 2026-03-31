@@ -2,14 +2,20 @@ package no.fdk.fdk_harvester.harvester
 
 import no.fdk.fdk_harvester.config.ApplicationProperties
 import no.fdk.fdk_harvester.kafka.ResourceEventProducer
-import no.fdk.fdk_harvester.model.*
+import no.fdk.fdk_harvester.model.FdkIdAndUri
+import no.fdk.fdk_harvester.model.HarvestDataSource
+import no.fdk.fdk_harvester.model.HarvestReport
+import no.fdk.fdk_harvester.model.HarvestSourceEntity
 import no.fdk.fdk_harvester.model.ResourceEntity
-import no.fdk.fdk_harvester.rdf.*
+import no.fdk.fdk_harvester.model.ResourceType
+import no.fdk.fdk_harvester.rdf.ModellDCATAPNO
+import no.fdk.fdk_harvester.rdf.computeChecksum
+import no.fdk.fdk_harvester.rdf.containsTriple
+import no.fdk.fdk_harvester.rdf.createIdFromString
 import no.fdk.fdk_harvester.rdf.createInformationModelCatalogRecordModel
+import no.fdk.fdk_harvester.rdf.createRDFResponse
 import no.fdk.fdk_harvester.repository.HarvestSourceRepository
 import no.fdk.fdk_harvester.repository.ResourceRepository
-import no.fdk.fdk_harvester.rdf.computeChecksum
-import no.fdk.harvest.DataType as HarvestDataType
 import org.apache.jena.rdf.model.Model
 import org.apache.jena.rdf.model.ModelFactory
 import org.apache.jena.rdf.model.Resource
@@ -21,6 +27,7 @@ import org.apache.jena.vocabulary.SKOS
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.util.*
+import no.fdk.harvest.DataType as HarvestDataType
 
 /** Harvests information model catalogs from RDF and publishes informationmodel events (with FDK catalog records in the graph). */
 @Service
@@ -31,7 +38,12 @@ class InformationModelHarvester(
     private val resourceEventProducer: ResourceEventProducer
 ) : BaseHarvester(harvestSourceRepository) {
 
-    fun harvestInformationModelCatalog(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+    fun harvestInformationModelCatalog(
+        source: HarvestDataSource,
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        runId: String
+    ): HarvestReport? =
         validateAndHarvest(source, harvestDate, forceUpdate, runId, "informationmodel", requiresAcceptHeader = true)
 
     override fun updateDB(
@@ -51,25 +63,29 @@ class InformationModelHarvester(
         val resourceGraphs = mutableMapOf<String, String>()
         val catalogPairs = splitCatalogsFromRDF(harvested, sourceUrl)
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
-        // Validate source ownership for all catalogs and models before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        // Validate source ownership for all catalogs before filtering by change
         catalogPairs.forEach { (catalog, _) ->
-            validateSourceUrl(catalog.resourceURI, harvestSource, resourceRepository.findByIdOrNull(catalog.resourceURI))
-            catalog.models.forEach { infoModel ->
-                validateSourceUrl(infoModel.resourceURI, harvestSource, resourceRepository.findByIdOrNull(infoModel.resourceURI))
-            }
+            validateSourceUrl(
+                catalog.resourceURI,
+                harvestSource,
+                resourceRepository.findByIdOrNull(catalog.resourceURI)
+            )
         }
         catalogPairs
             .filter { forceUpdate || it.first.catalogHasChanges(it.second) }
             .forEach {
                 val dbMeta = it.second
-                validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
                 val updatedCatalogMeta = if (dbMeta == null || it.first.catalogHasChanges(dbMeta)) {
                     it.first.mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
                         .also { resourceRepository.save(it) }
                 } else {
                     if (forceUpdate) {
-                        dbMeta.copy(checksum = catalogChecksum, modified = harvestDate.toInstant(), harvestSource = harvestSource)
+                        dbMeta.copy(
+                            checksum = catalogChecksum,
+                            modified = harvestDate.toInstant(),
+                            harvestSource = harvestSource
+                        )
                             .also { resourceRepository.save(it) }
                     } else {
                         dbMeta
@@ -77,27 +93,36 @@ class InformationModelHarvester(
                 }
                 updatedCatalogs.add(updatedCatalogMeta)
 
-                val catalogFdkUri = "${applicationProperties.informationmodelUri.substringBeforeLast("/")}/catalogs/${updatedCatalogMeta.fdkId}"
+                val catalogFdkUri =
+                    "${applicationProperties.informationmodelUri.substringBeforeLast("/")}/catalogs/${updatedCatalogMeta.fdkId}"
                 it.first.models.forEach { infoModel ->
-                    validateSourceUrl(infoModel.resourceURI, harvestSource, resourceRepository.findByIdOrNull(infoModel.resourceURI))
-                    val result = infoModel.updateDBOs(harvestDate, forceUpdate, harvestSource)
-                    result?.let { modelMeta ->
-                        updatedModels.add(modelMeta)
-                        val catalogRecordModel = createInformationModelCatalogRecordModel(
-                            informationModelUri = modelMeta.uri,
-                            informationModelFdkId = modelMeta.fdkId,
-                            catalogFdkUri = catalogFdkUri,
-                            issued = modelMeta.issued,
-                            modified = modelMeta.modified,
-                            informationModelUriBase = applicationProperties.informationmodelUri
+                    try {
+                        validateSourceUrl(
+                            infoModel.resourceURI,
+                            harvestSource,
+                            resourceRepository.findByIdOrNull(infoModel.resourceURI)
                         )
-                        val graphWithRecords = infoModel.harvested.union(catalogRecordModel)
-                        val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
-                        resourceGraphs[modelMeta.fdkId] = graphString
+                        val result = infoModel.updateDBOs(harvestDate, forceUpdate, harvestSource)
+                        result?.let { modelMeta ->
+                            updatedModels.add(modelMeta)
+                            val catalogRecordModel = createInformationModelCatalogRecordModel(
+                                informationModelUri = modelMeta.uri,
+                                informationModelFdkId = modelMeta.fdkId,
+                                catalogFdkUri = catalogFdkUri,
+                                issued = modelMeta.issued,
+                                modified = modelMeta.modified,
+                                informationModelUriBase = applicationProperties.informationmodelUri
+                            )
+                            val graphWithRecords = infoModel.harvested.union(catalogRecordModel)
+                            val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
+                            resourceGraphs[modelMeta.fdkId] = graphString
+                        }
+                    } catch (conflictError: HarvestSourceConflictException) {
+                        logger.warn("Information modeel skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
                     }
                 }
             }
-        
+
         // Mark models as removed if they were harvested from this source but are no longer present
         val modelsFromThisSource = resourceRepository.findAllByType(ResourceType.INFORMATIONMODEL)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed }
@@ -152,11 +177,17 @@ class InformationModelHarvester(
                 resourceRepository.save(updatedMeta)
                 updatedMeta
             }
+
             forceUpdate -> {
-                val updatedMeta = dbMeta.copy(checksum = harvestedChecksum, modified = harvestDate.toInstant(), harvestSource = harvestSource)
+                val updatedMeta = dbMeta.copy(
+                    checksum = harvestedChecksum,
+                    modified = harvestDate.toInstant(),
+                    harvestSource = harvestSource
+                )
                 resourceRepository.save(updatedMeta)
                 updatedMeta
             }
+
             else -> null
         }
     }
@@ -223,12 +254,13 @@ class InformationModelHarvester(
             .toList()
             .filterBlankNodeCatalogsAndModels(sourceURL)
             .map { catalogResource ->
-                val catalogInfoModels: List<InformationModelRDFModel> = catalogResource.listProperties(ModellDCATAPNO.model)
-                    .toList()
-                    .map { it.resource }
-                    .filterBlankNodeCatalogsAndModels(sourceURL)
-                    .filter { catalogContainsInfoModel(harvested, catalogResource.uri, it.uri) }
-                    .map { infoModel -> infoModel.extractInformationModel() }
+                val catalogInfoModels: List<InformationModelRDFModel> =
+                    catalogResource.listProperties(ModellDCATAPNO.model)
+                        .toList()
+                        .map { it.resource }
+                        .filterBlankNodeCatalogsAndModels(sourceURL)
+                        .filter { catalogContainsInfoModel(harvested, catalogResource.uri, it.uri) }
+                        .map { infoModel -> infoModel.extractInformationModel() }
 
                 val catalogModelWithoutInfoModels = catalogResource.extractCatalogModel()
                     .recursiveBlankNodeSkolem(catalogResource.uri)
@@ -269,6 +301,7 @@ class InformationModelHarvester(
         when {
             property.predicate != ModellDCATAPNO.model && property.isResourceProperty() ->
                 add(property).recursiveAddNonInformationModelResource(property.resource)
+
             property.predicate != ModellDCATAPNO.model -> add(property)
             property.isResourceProperty() && property.resource.isURIResource -> add(property)
             else -> this

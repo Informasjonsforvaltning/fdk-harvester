@@ -20,6 +20,7 @@ import no.fdk.fdk_harvester.repository.HarvestSourceRepository
 import no.fdk.fdk_harvester.repository.ResourceRepository
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -87,6 +88,52 @@ class HarvesterHappyPathTest {
                 graphWithRecord.contains("isPartOf") || graphWithRecord.contains("dct:isPartOf"),
                 "produced graph should contain dct:isPartOf for record"
             )
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `dataset harvester - skips conflicting dataset and continues with remaining resources`() {
+        val conflictDatasetUri = "http://example.org/dataset-conflict"
+        val validDatasetUri = "http://example.org/dataset-ok"
+        val ttl = """
+            @prefix dcat: <http://www.w3.org/ns/dcat#> .
+            @prefix dct: <http://purl.org/dc/terms/> .
+            <http://example.org/catalog> a dcat:Catalog ;
+              dcat:dataset <$conflictDatasetUri> ;
+              dcat:dataset <$validDatasetUri> .
+            <$conflictDatasetUri> a dcat:Dataset ; dct:title "Conflicting dataset" .
+            <$validDatasetUri> a dcat:Dataset ; dct:title "Valid dataset" .
+        """.trimIndent()
+
+        val server = wireMock(ttl)
+        try {
+            val resourceRepository = mockResourceRepositoryWithConflicts(
+                mapOf(conflictDatasetUri to ResourceType.DATASET)
+            )
+            val harvestSourceRepository = mockHarvestSourceRepository()
+            val producer = mockk<ResourceEventProducer>(relaxed = true)
+
+            val appProps = ApplicationProperties(
+                datasetUri = "https://datasets.fellesdatakatalog.digdir.no/datasets"
+            )
+            val harvester = DatasetHarvester(appProps, resourceRepository, harvestSourceRepository, producer)
+            val report = harvester.harvestDatasetCatalog(
+                source = HarvestDataSource(
+                    id = "source-1",
+                    url = "http://localhost:${server.port()}/rdf",
+                    acceptHeaderValue = "text/turtle"
+                ),
+                harvestDate = Calendar.getInstance(),
+                forceUpdate = false,
+                runId = "run-1"
+            )
+
+            assertNotNull(report)
+            assertFalse(report!!.harvestError)
+            assertEquals(1, report.changedResources.size, "only non-conflicting dataset should be harvested")
+            assertEquals(validDatasetUri, report.changedResources.first().uri)
         } finally {
             server.stop()
         }
@@ -256,6 +303,53 @@ class HarvesterHappyPathTest {
     }
 
     @Test
+    fun `concept harvester - skips conflicting concept and continues with remaining concepts`() {
+        val conflictConceptUri = "http://example.org/concept-conflict"
+        val validConceptUri = "http://example.org/concept-ok"
+        val ttl = """
+            @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+            <http://example.org/collection> a skos:Collection ;
+              skos:member <$conflictConceptUri> ;
+              skos:member <$validConceptUri> .
+            <$conflictConceptUri> a skos:Concept .
+            <$validConceptUri> a skos:Concept .
+        """.trimIndent()
+
+        val server = wireMock(ttl)
+        try {
+            val orgAdapter = mockk<DefaultOrganizationsAdapter>(relaxed = true)
+            val resourceRepository = mockResourceRepositoryWithConflicts(
+                mapOf(conflictConceptUri to ResourceType.CONCEPT)
+            )
+            val harvestSourceRepository = mockHarvestSourceRepository()
+            val producer = mockk<ResourceEventProducer>(relaxed = true)
+
+            val appProps = ApplicationProperties(
+                conceptUri = "https://concepts.fellesdatakatalog.digdir.no/concepts"
+            )
+            val harvester = ConceptHarvester(orgAdapter, resourceRepository, producer, appProps, harvestSourceRepository)
+            val report = harvester.harvestConceptCollection(
+                source = HarvestDataSource(
+                    id = "source-1",
+                    url = "http://localhost:${server.port()}/rdf",
+                    acceptHeaderValue = "text/turtle",
+                    publisherId = null
+                ),
+                harvestDate = Calendar.getInstance(),
+                forceUpdate = false,
+                runId = "run-1"
+            )
+
+            assertNotNull(report)
+            assertFalse(report!!.harvestError)
+            assertEquals(1, report.changedResources.size, "only non-conflicting concept should be harvested")
+            assertEquals(validConceptUri, report.changedResources.first().uri)
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun `service harvester - harvestServices happy path`() {
         val ttl = """
             @prefix dcat: <http://www.w3.org/ns/dcat#> .
@@ -414,6 +508,42 @@ class HarvesterHappyPathTest {
     private fun mockResourceRepository(): ResourceRepository {
         val repo = mockk<ResourceRepository>()
         every { repo.findById(any<String>()) } returns Optional.empty()
+        every { repo.findAllByType(any()) } returns emptyList()
+        every { repo.findAllByTypeAndRemoved(any(), any()) } returns emptyList()
+        every { repo.findByFdkId(any()) } returns null
+        every { repo.findAllByFdkId(any()) } returns emptyList()
+        every { repo.save(any<ResourceEntity>()) } answers { firstArg() }
+        every { repo.saveAll(any<Iterable<ResourceEntity>>()) } answers { firstArg<Iterable<ResourceEntity>>().toList() }
+        return repo
+    }
+
+    private fun mockResourceRepositoryWithConflicts(conflicts: Map<String, ResourceType>): ResourceRepository {
+        val repo = mockk<ResourceRepository>()
+        every { repo.findById(any<String>()) } answers {
+            val uri = firstArg<String>()
+            val conflictType = conflicts[uri]
+            if (conflictType == null) {
+                Optional.empty()
+            } else {
+                Optional.of(
+                    ResourceEntity(
+                        uri = uri,
+                        type = conflictType,
+                        fdkId = "existing-fdk-id",
+                        removed = false,
+                        issued = Instant.now(),
+                        modified = Instant.now(),
+                        checksum = "existing-checksum",
+                        harvestSource = HarvestSourceEntity(
+                            id = 2L,
+                            uri = "http://example.org/other-source",
+                            checksum = "other-source-checksum",
+                            issued = Instant.now()
+                        )
+                    )
+                )
+            }
+        }
         every { repo.findAllByType(any()) } returns emptyList()
         every { repo.findAllByTypeAndRemoved(any(), any()) } returns emptyList()
         every { repo.findByFdkId(any()) } returns null

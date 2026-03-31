@@ -329,6 +329,12 @@
                         </configuration>
                     </execution>
                 </executions>
+                <configuration>
+                    <jvmTarget>${java.release}</jvmTarget>
+                    <compilerPlugins>
+                        <plugin>spring</plugin>
+                    </compilerPlugins>
+                </configuration>
             </plugin>
 
             <plugin>
