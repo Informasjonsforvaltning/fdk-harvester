@@ -3,15 +3,22 @@ package no.fdk.fdk_harvester.harvester
 import no.fdk.fdk_harvester.adapter.DefaultOrganizationsAdapter
 import no.fdk.fdk_harvester.config.ApplicationProperties
 import no.fdk.fdk_harvester.kafka.ResourceEventProducer
-import no.fdk.fdk_harvester.model.*
-import no.fdk.fdk_harvester.rdf.*
+import no.fdk.fdk_harvester.model.FdkIdAndUri
+import no.fdk.fdk_harvester.model.HarvestDataSource
+import no.fdk.fdk_harvester.model.HarvestReport
+import no.fdk.fdk_harvester.model.HarvestSourceEntity
+import no.fdk.fdk_harvester.model.Organization
+import no.fdk.fdk_harvester.model.ResourceEntity
+import no.fdk.fdk_harvester.model.ResourceType
+import no.fdk.fdk_harvester.rdf.CV
+import no.fdk.fdk_harvester.rdf.DCATNO
+import no.fdk.fdk_harvester.rdf.computeChecksum
+import no.fdk.fdk_harvester.rdf.containsTriple
 import no.fdk.fdk_harvester.rdf.createEventCatalogRecordModel
+import no.fdk.fdk_harvester.rdf.createIdFromString
+import no.fdk.fdk_harvester.rdf.createRDFResponse
 import no.fdk.fdk_harvester.repository.HarvestSourceRepository
 import no.fdk.fdk_harvester.repository.ResourceRepository
-import no.fdk.fdk_harvester.rdf.computeChecksum
-import no.fdk.fdk_harvester.harvester.formatNowWithOsloTimeZone
-import no.fdk.fdk_harvester.harvester.formatWithOsloTimeZone
-import no.fdk.harvest.DataType as HarvestDataType
 import org.apache.jena.query.QueryExecutionFactory
 import org.apache.jena.query.QueryFactory
 import org.apache.jena.rdf.model.Model
@@ -24,12 +31,10 @@ import org.apache.jena.vocabulary.DCAT
 import org.apache.jena.vocabulary.DCTerms
 import org.apache.jena.vocabulary.RDF
 import org.apache.jena.vocabulary.RDFS
-import org.slf4j.LoggerFactory
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.util.*
-
-private val LOGGER = LoggerFactory.getLogger(EventHarvester::class.java)
+import no.fdk.harvest.DataType as HarvestDataType
 
 /** Harvests event catalogs from RDF and publishes event events (with FDK catalog records in the graph). */
 @Service
@@ -41,7 +46,12 @@ class EventHarvester(
     harvestSourceRepository: HarvestSourceRepository
 ) : BaseHarvester(harvestSourceRepository) {
 
-    fun harvestEvents(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+    fun harvestEvents(
+        source: HarvestDataSource,
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        runId: String
+    ): HarvestReport? =
         validateAndHarvest(source, harvestDate, forceUpdate, runId, "event", requiresAcceptHeader = true)
 
     override fun updateDB(
@@ -62,15 +72,26 @@ class EventHarvester(
         } else null
 
         val catalogs = splitCatalogsFromRDF(harvested, allEvents, sourceUrl, organization)
-        val (updatedCatalogs, eventUriToCatalogFdkUri) = updateCatalogs(catalogs, harvestDate, forceUpdate, harvestSource)
-        val (updatedEvents, resourceGraphs) = updateEvents(allEvents, harvestDate, forceUpdate, harvestSource, eventUriToCatalogFdkUri)
+        val (updatedCatalogs, eventUriToCatalogFdkUri) = updateCatalogs(
+            catalogs,
+            harvestDate,
+            forceUpdate,
+            harvestSource
+        )
+        val (updatedEvents, resourceGraphs) = updateEvents(
+            allEvents,
+            harvestDate,
+            forceUpdate,
+            harvestSource,
+            eventUriToCatalogFdkUri
+        )
 
         // Mark events as removed if they were harvested from this source but are no longer present
         val eventsFromThisSource = resourceRepository.findAllByType(ResourceType.EVENT)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed }
         val currentEventUris = allEvents.map { it.eventURI }.toSet()
         val removedEvents = eventsFromThisSource.filter { !currentEventUris.contains(it.uri) }
-        
+
         removedEvents.map { it.copy(removed = true) }
             .run { resourceRepository.saveAll(this) }
 
@@ -107,35 +128,45 @@ class EventHarvester(
         return report
     }
 
-    private fun updateCatalogs(catalogs: List<CatalogAndEventModels>, harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): Pair<List<FdkIdAndUri>, Map<String, String>> {
+    private fun updateCatalogs(
+        catalogs: List<CatalogAndEventModels>,
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        harvestSource: HarvestSourceEntity
+    ): Pair<List<FdkIdAndUri>, Map<String, String>> {
         val eventUriToCatalogFdkUri = mutableMapOf<String, String>()
-        // Validate source ownership for all catalogs and events before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        // Validate source ownership for all catalogs before filtering by change
         catalogs.forEach { catalog ->
-            validateSourceUrl(catalog.resourceURI, harvestSource, resourceRepository.findByIdOrNull(catalog.resourceURI))
-            catalog.events.forEach { eventURI ->
-                validateSourceUrl(eventURI, harvestSource, resourceRepository.findByIdOrNull(eventURI))
-            }
+            validateSourceUrl(
+                catalog.resourceURI,
+                harvestSource,
+                resourceRepository.findByIdOrNull(catalog.resourceURI)
+            )
         }
         val updatedCatalogs = catalogs
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
             .filter { forceUpdate || it.first.catalogHasChanges(it.second, computeChecksum(it.first.harvestedCatalog)) }
             .map {
                 val dbMeta = it.second
-                validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
                 val catalogMeta = if (dbMeta == null || it.first.catalogHasChanges(dbMeta, catalogChecksum)) {
                     it.first.mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
                         .also { updatedMeta -> resourceRepository.save(updatedMeta) }
                 } else {
                     if (forceUpdate) {
-                        dbMeta.copy(checksum = catalogChecksum, modified = harvestDate.toInstant(), harvestSource = harvestSource)
+                        dbMeta.copy(
+                            checksum = catalogChecksum,
+                            modified = harvestDate.toInstant(),
+                            harvestSource = harvestSource
+                        )
                             .also { resourceRepository.save(it) }
                     } else {
                         dbMeta
                     }
                 }
 
-                val catalogFdkUri = "${applicationProperties.eventUri.substringBeforeLast("/")}/catalogs/${catalogMeta.fdkId}"
+                val catalogFdkUri =
+                    "${applicationProperties.eventUri.substringBeforeLast("/")}/catalogs/${catalogMeta.fdkId}"
                 it.first.events.forEach { eventURI ->
                     addIsPartOfToEvents(eventURI, catalogMeta.uri)
                     eventUriToCatalogFdkUri[eventURI] = catalogFdkUri
@@ -201,22 +232,37 @@ class EventHarvester(
         return Pair(updatedEvents, resourceGraphs)
     }
 
-    private fun EventRDFModel.updateDBOs(harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): ResourceEntity? {
-        val dbMeta = resourceRepository.findByIdOrNull(eventURI)
-        validateSourceUrl(eventURI, harvestSource, dbMeta)
-        val harvestedChecksum = computeChecksum(harvested)
-        return when {
-            dbMeta == null || dbMeta.removed || hasChanges(dbMeta, harvestedChecksum) -> {
-                val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
-                resourceRepository.save(updatedMeta)
-                updatedMeta
+    private fun EventRDFModel.updateDBOs(
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        harvestSource: HarvestSourceEntity
+    ): ResourceEntity? {
+        try {
+            val dbMeta = resourceRepository.findByIdOrNull(eventURI)
+            validateSourceUrl(eventURI, harvestSource, dbMeta)
+            val harvestedChecksum = computeChecksum(harvested)
+            return when {
+                dbMeta == null || dbMeta.removed || hasChanges(dbMeta, harvestedChecksum) -> {
+                    val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+                    resourceRepository.save(updatedMeta)
+                    updatedMeta
+                }
+
+                forceUpdate -> {
+                    val updatedMeta = dbMeta.copy(
+                        checksum = harvestedChecksum,
+                        modified = harvestDate.toInstant(),
+                        harvestSource = harvestSource
+                    )
+                    resourceRepository.save(updatedMeta)
+                    updatedMeta
+                }
+
+                else -> null
             }
-            forceUpdate -> {
-                val updatedMeta = dbMeta.copy(checksum = harvestedChecksum, modified = harvestDate.toInstant(), harvestSource = harvestSource)
-                resourceRepository.save(updatedMeta)
-                updatedMeta
-            }
-            else -> null
+        } catch (conflictError: HarvestSourceConflictException) {
+            logger.warn("Event skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
+            return null
         }
     }
 
@@ -241,7 +287,10 @@ class EventHarvester(
         )
     }
 
-    private fun getEventsRemovedThisHarvest(events: List<String>, harvestSource: HarvestSourceEntity): List<ResourceEntity> =
+    private fun getEventsRemovedThisHarvest(
+        events: List<String>,
+        harvestSource: HarvestSourceEntity
+    ): List<ResourceEntity> =
         resourceRepository.findAllByType(ResourceType.EVENT)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed && !events.contains(it.uri) }
 
@@ -264,7 +313,12 @@ class EventHarvester(
             .filterBlankNodeEvents(sourceURL)
             .map { eventResource -> eventResource.extractEvent() }
 
-    private fun splitCatalogsFromRDF(harvested: Model, allEvents: List<EventRDFModel>, sourceURL: String, organization: Organization?): List<CatalogAndEventModels> {
+    private fun splitCatalogsFromRDF(
+        harvested: Model,
+        allEvents: List<EventRDFModel>,
+        sourceURL: String,
+        organization: Organization?
+    ): List<CatalogAndEventModels> {
         val harvestedCatalogs = harvested.listResourcesWithProperty(RDF.type, DCAT.Catalog)
             .toList()
             .filterBlankNodeCatalogsAndEvents(sourceURL)
@@ -292,10 +346,12 @@ class EventHarvester(
                 )
             }
 
-        return harvestedCatalogs.plus(generatedCatalog(
-            allEvents.filterNot { it.isMemberOfAnyCatalog },
-            sourceURL,
-            organization)
+        return harvestedCatalogs.plus(
+            generatedCatalog(
+                allEvents.filterNot { it.isMemberOfAnyCatalog },
+                sourceURL,
+                organization
+            )
         )
     }
 
@@ -310,7 +366,7 @@ class EventHarvester(
         filter {
             if (it.isURIResource) true
             else {
-                LOGGER.warn("Blank node event filtered when harvesting $sourceURL")
+                logger.warn("Blank node event filtered when harvesting $sourceURL")
                 false
             }
         }
@@ -319,7 +375,7 @@ class EventHarvester(
         filter {
             if (it.isURIResource) true
             else {
-                LOGGER.warn("Blank node catalog or event filtered when harvesting $sourceURL")
+                logger.warn("Blank node catalog or event filtered when harvesting $sourceURL")
                 false
             }
         }
@@ -352,6 +408,7 @@ class EventHarvester(
         when {
             property.predicate != DCATNO.containsEvent && property.isResourceProperty() ->
                 add(property).recursiveAddNonEventResource(property.resource)
+
             property.predicate != DCATNO.containsEvent -> add(property)
             property.isResourceProperty() && property.resource.isURIResource -> add(property)
             else -> this

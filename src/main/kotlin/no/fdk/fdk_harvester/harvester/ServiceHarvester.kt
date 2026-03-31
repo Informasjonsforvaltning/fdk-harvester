@@ -3,14 +3,24 @@ package no.fdk.fdk_harvester.harvester
 import no.fdk.fdk_harvester.adapter.DefaultOrganizationsAdapter
 import no.fdk.fdk_harvester.config.ApplicationProperties
 import no.fdk.fdk_harvester.kafka.ResourceEventProducer
-import no.fdk.fdk_harvester.model.*
-import no.fdk.fdk_harvester.rdf.*
+import no.fdk.fdk_harvester.model.FdkIdAndUri
+import no.fdk.fdk_harvester.model.HarvestDataSource
+import no.fdk.fdk_harvester.model.HarvestReport
+import no.fdk.fdk_harvester.model.HarvestSourceEntity
+import no.fdk.fdk_harvester.model.Organization
+import no.fdk.fdk_harvester.model.ResourceEntity
+import no.fdk.fdk_harvester.model.ResourceType
+import no.fdk.fdk_harvester.rdf.CPSV
+import no.fdk.fdk_harvester.rdf.CPSVNO
+import no.fdk.fdk_harvester.rdf.CV
+import no.fdk.fdk_harvester.rdf.DCATNO
+import no.fdk.fdk_harvester.rdf.computeChecksum
+import no.fdk.fdk_harvester.rdf.containsTriple
+import no.fdk.fdk_harvester.rdf.createIdFromString
+import no.fdk.fdk_harvester.rdf.createRDFResponse
 import no.fdk.fdk_harvester.rdf.createServiceCatalogRecordModel
 import no.fdk.fdk_harvester.repository.HarvestSourceRepository
 import no.fdk.fdk_harvester.repository.ResourceRepository
-import no.fdk.fdk_harvester.rdf.computeChecksum
-import no.fdk.fdk_harvester.model.Organization
-import no.fdk.harvest.DataType as HarvestDataType
 import org.apache.jena.query.QueryExecutionFactory
 import org.apache.jena.query.QueryFactory
 import org.apache.jena.rdf.model.Model
@@ -20,10 +30,14 @@ import org.apache.jena.rdf.model.Resource
 import org.apache.jena.rdf.model.ResourceFactory
 import org.apache.jena.rdf.model.Statement
 import org.apache.jena.riot.Lang
-import org.apache.jena.vocabulary.*
+import org.apache.jena.vocabulary.DCAT
+import org.apache.jena.vocabulary.DCTerms
+import org.apache.jena.vocabulary.RDF
+import org.apache.jena.vocabulary.RDFS
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.util.*
+import no.fdk.harvest.DataType as HarvestDataType
 
 /** Harvests CPSV/DCAT service catalogs from RDF and publishes service events (with FDK catalog records in the graph). */
 @Service
@@ -35,7 +49,12 @@ class ServiceHarvester(
     private val resourceEventProducer: ResourceEventProducer
 ) : BaseHarvester(harvestSourceRepository) {
 
-    fun harvestServices(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+    fun harvestServices(
+        source: HarvestDataSource,
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        runId: String
+    ): HarvestReport? =
         validateAndHarvest(source, harvestDate, forceUpdate, runId, "service", requiresAcceptHeader = true)
 
     override fun updateDB(
@@ -56,8 +75,19 @@ class ServiceHarvester(
         } else null
 
         val catalogs = splitCatalogsFromRDF(harvested, allServices, sourceUrl, organization)
-        val (updatedCatalogs, serviceUriToCatalogFdkUri) = updateCatalogs(catalogs, harvestDate, forceUpdate, harvestSource)
-        val (updatedServices, resourceGraphs) = updateServices(allServices, harvestDate, forceUpdate, harvestSource, serviceUriToCatalogFdkUri)
+        val (updatedCatalogs, serviceUriToCatalogFdkUri) = updateCatalogs(
+            catalogs,
+            harvestDate,
+            forceUpdate,
+            harvestSource
+        )
+        val (updatedServices, resourceGraphs) = updateServices(
+            allServices,
+            harvestDate,
+            forceUpdate,
+            harvestSource,
+            serviceUriToCatalogFdkUri
+        )
 
         val removedServices = getServicesRemovedThisHarvest(
             allServices.map { it.resourceURI },
@@ -97,37 +127,46 @@ class ServiceHarvester(
         return report
     }
 
-    private fun updateCatalogs(catalogs: List<ServiceCatalogRDFModel>, harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): Pair<List<FdkIdAndUri>, Map<String, String>> {
+    private fun updateCatalogs(
+        catalogs: List<ServiceCatalogRDFModel>,
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        harvestSource: HarvestSourceEntity
+    ): Pair<List<FdkIdAndUri>, Map<String, String>> {
         val serviceUriToCatalogFdkUri = mutableMapOf<String, String>()
-        // Validate source ownership for all catalogs and services before filtering by change (avoids reporting 0 change when feed contains resources owned by another source)
+        // Validate source ownership for all catalogs before filtering by change
         catalogs.forEach { catalog ->
-            validateSourceUrl(catalog.resourceURI, harvestSource, resourceRepository.findByIdOrNull(catalog.resourceURI))
-            catalog.services.forEach { serviceURI ->
-                validateSourceUrl(serviceURI, harvestSource, resourceRepository.findByIdOrNull(serviceURI))
-            }
+            validateSourceUrl(
+                catalog.resourceURI,
+                harvestSource,
+                resourceRepository.findByIdOrNull(catalog.resourceURI)
+            )
         }
         val updatedCatalogs = catalogs
             .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
             .filter { forceUpdate || it.first.hasChanges(it.second, computeChecksum(it.first.harvested)) }
             .map {
                 val dbMeta = it.second
-                validateSourceUrl(it.first.resourceURI, harvestSource, dbMeta)
                 val catalogChecksum = computeChecksum(it.first.harvested)
                 val updatedMeta = if (dbMeta == null || it.first.hasChanges(dbMeta, catalogChecksum)) {
                     it.first.mapToResourceMeta(harvestDate, dbMeta, catalogChecksum, harvestSource)
                         .also { resourceRepository.save(it) }
                 } else {
                     if (forceUpdate) {
-                        dbMeta.copy(checksum = catalogChecksum, modified = harvestDate.toInstant(), harvestSource = harvestSource)
+                        dbMeta.copy(
+                            checksum = catalogChecksum,
+                            modified = harvestDate.toInstant(),
+                            harvestSource = harvestSource
+                        )
                             .also { resourceRepository.save(it) }
                     } else {
                         dbMeta
                     }
                 }
 
-                val catalogFdkUri = "${applicationProperties.serviceUri.substringBeforeLast("/")}/catalogs/${updatedMeta.fdkId}"
+                val catalogFdkUri =
+                    "${applicationProperties.serviceUri.substringBeforeLast("/")}/catalogs/${updatedMeta.fdkId}"
                 it.first.services.forEach { serviceURI: String ->
-                    validateSourceUrl(serviceURI, harvestSource, resourceRepository.findByIdOrNull(serviceURI))
                     addIsPartOfToService(serviceURI, updatedMeta.uri)
                     serviceUriToCatalogFdkUri[serviceURI] = catalogFdkUri
                 }
@@ -192,22 +231,37 @@ class ServiceHarvester(
         return Pair(updatedServices, resourceGraphs)
     }
 
-    private fun ServiceRDFModel.updateDBOs(harvestDate: Calendar, forceUpdate: Boolean, harvestSource: HarvestSourceEntity): ResourceEntity? {
-        val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
-        validateSourceUrl(resourceURI, harvestSource, dbMeta)
-        val harvestedChecksum = computeChecksum(harvested)
-        return when {
-            dbMeta == null || dbMeta.removed || hasChanges(dbMeta, harvestedChecksum) -> {
-                val updatedMeta = mapToResourceMeta(harvestDate, dbMeta, harvestedChecksum, harvestSource)
-                resourceRepository.save(updatedMeta)
-                updatedMeta
+    private fun ServiceRDFModel.updateDBOs(
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        harvestSource: HarvestSourceEntity
+    ): ResourceEntity? {
+        try {
+            val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
+            validateSourceUrl(resourceURI, harvestSource, dbMeta)
+            val harvestedChecksum = computeChecksum(harvested)
+            return when {
+                dbMeta == null || dbMeta.removed || hasChanges(dbMeta, harvestedChecksum) -> {
+                    val updatedMeta = mapToResourceMeta(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+                    resourceRepository.save(updatedMeta)
+                    updatedMeta
+                }
+
+                forceUpdate -> {
+                    val updatedMeta = dbMeta.copy(
+                        checksum = harvestedChecksum,
+                        modified = harvestDate.toInstant(),
+                        harvestSource = harvestSource
+                    )
+                    resourceRepository.save(updatedMeta)
+                    updatedMeta
+                }
+
+                else -> null
             }
-            forceUpdate -> {
-                val updatedMeta = dbMeta.copy(checksum = harvestedChecksum, modified = harvestDate.toInstant(), harvestSource = harvestSource)
-                resourceRepository.save(updatedMeta)
-                updatedMeta
-            }
-            else -> null
+        } catch (conflictError: HarvestSourceConflictException) {
+            logger.warn("Service skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
+            return null
         }
     }
 
@@ -232,7 +286,10 @@ class ServiceHarvester(
         )
     }
 
-    private fun getServicesRemovedThisHarvest(services: List<String>, harvestSource: HarvestSourceEntity): List<ResourceEntity> =
+    private fun getServicesRemovedThisHarvest(
+        services: List<String>,
+        harvestSource: HarvestSourceEntity
+    ): List<ResourceEntity> =
         resourceRepository.findAllByType(ResourceType.SERVICE)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed && !services.contains(it.uri) }
 
@@ -249,8 +306,10 @@ class ServiceHarvester(
         if (dbMeta == null) true
         else harvestedChecksum != dbMeta.checksum
 
-    private fun splitCatalogsFromRDF(harvested: Model, allServices: List<ServiceRDFModel>,
-                                     sourceURL: String, organization: Organization?): List<ServiceCatalogRDFModel> {
+    private fun splitCatalogsFromRDF(
+        harvested: Model, allServices: List<ServiceRDFModel>,
+        sourceURL: String, organization: Organization?
+    ): List<ServiceCatalogRDFModel> {
         val harvestedCatalogs = harvested.listResourcesWithProperty(RDF.type, DCAT.Catalog)
             .toList()
             .excludeBlankNodes(sourceURL)
@@ -278,10 +337,12 @@ class ServiceHarvester(
                 )
             }
 
-        return harvestedCatalogs.plus(generatedCatalog(
-            allServices.filterNot { it.isMemberOfAnyCatalog },
-            sourceURL,
-            organization)
+        return harvestedCatalogs.plus(
+            generatedCatalog(
+                allServices.filterNot { it.isMemberOfAnyCatalog },
+                sourceURL,
+                organization
+            )
         )
     }
 
@@ -321,6 +382,7 @@ class ServiceHarvester(
         when {
             property.predicate != DCATNO.containsService && property.isResourceProperty() ->
                 add(property).recursiveAddNonServiceResources(property.resource)
+
             property.predicate != DCATNO.containsService -> add(property)
             property.isResourceProperty() && property.resource.isURIResource -> add(property)
             else -> this
@@ -368,7 +430,8 @@ class ServiceHarvester(
     ): ServiceCatalogRDFModel {
         val serviceURIs = services.map { it.resourceURI }.toSet()
         val generatedCatalogURI = "$sourceURL#GeneratedCatalog"
-        val catalogModelWithoutServices = createModelForHarvestSourceCatalog(generatedCatalogURI, serviceURIs, organization)
+        val catalogModelWithoutServices =
+            createModelForHarvestSourceCatalog(generatedCatalogURI, serviceURIs, organization)
 
         val catalogModel = ModelFactory.createDefaultModel()
         services.forEach { catalogModel.add(it.harvested) }
