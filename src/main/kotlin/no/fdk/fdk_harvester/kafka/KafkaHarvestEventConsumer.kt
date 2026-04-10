@@ -41,7 +41,7 @@ class KafkaHarvestEventConsumer(
             return
         }
 
-        logger().info("Processing harvest event - phase: ${event.phase}, dataType: ${event.dataType}, dataSourceId: ${event.dataSourceId}")
+        logger().debug("Processing harvest event - phase: ${event.phase}, dataType: ${event.dataType}, dataSourceId: ${event.dataSourceId}")
 
         try {
             circuitBreaker.process(record)

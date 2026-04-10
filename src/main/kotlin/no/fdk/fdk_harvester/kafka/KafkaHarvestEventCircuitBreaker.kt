@@ -151,7 +151,7 @@ open class KafkaHarvestEventCircuitBreaker(
             runId = runId
         )
 
-        LOGGER.info("Successfully marked ${report.removedResources.size} resources as deleted for dataSourceUrl: $dataSourceUrl")
+        LOGGER.debug("Successfully marked ${report.removedResources.size} resources as deleted for dataSourceUrl: $dataSourceUrl")
 
         // Publish removed resource events
         if (report.removedResources.isNotEmpty()) {
