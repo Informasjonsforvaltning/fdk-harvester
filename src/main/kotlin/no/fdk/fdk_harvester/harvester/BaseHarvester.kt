@@ -199,7 +199,7 @@ abstract class BaseHarvester(
     ): HarvestReport {
         val sourceUrl = source.url!!
         val harvestedChecksum = computeChecksum(harvested)
-        logger.info("Updating metadata for $sourceUrl (source checksum computed: $harvestedChecksum)")
+        logger.debug("Updating metadata for $sourceUrl (source checksum computed: $harvestedChecksum)")
         val harvestSource = getOrCreateHarvestSource(sourceUrl, harvestedChecksum, harvestDate.toInstant())
         return updateDB(harvested, source, harvestDate, forceUpdate, runId, dataType, harvestSource)
     }

@@ -62,7 +62,7 @@ open class HarvestService(
         if (forceBecauseNotInitialized) {
             logger().info("Harvest source not initialized for $dataSourceUrl, running forced harvest")
         }
-        logger().info("Initiating harvest for dataSourceId: $dataSourceId, dataType: $dataType, runId: $runId, forced: $effectiveForced")
+        logger().debug("Initiating harvest for dataSourceId: $dataSourceId, dataType: $dataType, runId: $runId, forced: $effectiveForced")
 
         return try {
             // Create HarvestDataSource
@@ -96,11 +96,11 @@ open class HarvestService(
                 )
             }
 
-            logger().info("Completed harvest for dataSourceId: $dataSourceId, dataType: $dataType")
+            logger().debug("Completed harvest for dataSourceId: $dataSourceId, dataType: $dataType")
             if (report != null && forceBecauseNotInitialized) {
                 harvestSourceRepository.findByUri(dataSourceUrl)?.let { source ->
                     harvestSourceRepository.save(source.copy(initialized = true))
-                    logger().info("Marked harvest source as initialized for $dataSourceUrl")
+                    logger().debug("Marked harvest source as initialized for $dataSourceUrl")
                 }
             }
             report
@@ -126,7 +126,7 @@ open class HarvestService(
         dataSourceId: String,
         runId: String
     ): HarvestReport {
-        logger().info("Marking resources as deleted for sourceUrl: $sourceUrl, dataType: $dataType")
+        logger().debug("Marking resources as deleted for sourceUrl: $sourceUrl, dataType: $dataType")
 
         val harvestSource = harvestSourceRepository.findByUri(sourceUrl)
             ?: throw IllegalArgumentException("Harvest source not found for sourceUrl: $sourceUrl")
@@ -144,7 +144,7 @@ open class HarvestService(
             }
 
         val removedResources = if (resourcesToUpdate.isEmpty()) {
-            logger().info("No resources to mark as deleted for sourceUrl: $sourceUrl")
+            logger().debug("No resources to mark as deleted for sourceUrl: $sourceUrl")
             emptyList()
         } else {
             val now = Instant.now()
@@ -165,7 +165,7 @@ open class HarvestService(
                 updated
             }
 
-            logger().info("Marked ${updatedResources.size} resources as deleted for sourceUrl: $sourceUrl")
+            logger().debug("Marked ${updatedResources.size} resources as deleted for sourceUrl: $sourceUrl")
             updatedResources.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) }
         }
 
@@ -190,7 +190,7 @@ open class HarvestService(
         runId: String,
         dataSourceId: String
     ): HarvestReport {
-        logger().info("Marking resource as deleted for fdkId: $fdkId")
+        logger().debug("Marking resource as deleted for fdkId: $fdkId")
 
         val harvestDate = Calendar.getInstance()
         val resourcesToUpdate = resourceRepository.findAllByFdkId(fdkId)
@@ -214,7 +214,7 @@ open class HarvestService(
                 updated
             }
 
-            logger().info("Marked ${updatedResources.size} resources as deleted for fdkId: $fdkId")
+            logger().debug("Marked ${updatedResources.size} resources as deleted for fdkId: $fdkId")
         }
 
         // Create a report for the remove operation

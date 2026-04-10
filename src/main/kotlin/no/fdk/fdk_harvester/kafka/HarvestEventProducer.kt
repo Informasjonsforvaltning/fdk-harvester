@@ -42,7 +42,7 @@ class HarvestEventProducer(
 
             val key = initiatingEvent.runId.toString()
             val future = kafkaTemplate.send(topicName, key, harvestingEvent)
-            logger.info(
+            logger.debug(
                 "Produced harvest event: topic={}, key={}, phase={}, runId={}, dataType={}, dataSourceId={}, dataSourceUrl={}, startTime={}, endTime={}, errorMessage={}, changedResourcesCount={}, removedResourcesCount={}",
                 topicName, key, harvestingEvent.phase, harvestingEvent.runId, harvestingEvent.dataType,
                 harvestingEvent.dataSourceId, harvestingEvent.dataSourceUrl, harvestingEvent.startTime, harvestingEvent.endTime,
@@ -87,7 +87,7 @@ class HarvestEventProducer(
                 .build()
 
             kafkaTemplate.send(topicName, runId, event)
-            logger.info(
+            logger.debug(
                 "Produced harvest event: topic={}, key={}, phase={}, runId={}, dataType={}, dataSourceId={}, dataSourceUrl={}, startTime={}, endTime={}, errorMessage={}, changedResourcesCount={}, removedResourcesCount={}",
                 topicName, runId, event.phase, event.runId, event.dataType, event.dataSourceId, event.dataSourceUrl,
                 event.startTime, event.endTime, event.errorMessage, event.changedResourcesCount, event.removedResourcesCount
