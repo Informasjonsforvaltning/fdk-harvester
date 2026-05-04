@@ -14,7 +14,7 @@
     <parent>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-parent</artifactId>
-      <version>4.0.4</version>
+      <version>4.0.6</version>
       <relativePath/>
     </parent>
 
@@ -29,8 +29,8 @@
         <maven.exec.skip>false</maven.exec.skip>
         <!--end standard properties-->
 
-        <kotlin.version>2.3.10</kotlin.version>
-        <testcontainers.version>2.0.4</testcontainers.version>
+        <kotlin.version>2.3.21</kotlin.version>
+        <testcontainers.version>2.0.5</testcontainers.version>
         <jena.version>6.0.0</jena.version>
         <avro.version>1.12.1</avro.version>
         <confluent.version>8.2.0</confluent.version>
@@ -96,7 +96,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <version>5.6</version>
+            <version>5.6.1</version>
         </dependency>
         <dependency>
             <groupId>io.confluent</groupId>
@@ -157,7 +157,7 @@
         <dependency>
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-circuitbreaker</artifactId>
-            <version>2.3.0</version>
+            <version>2.4.0</version>
         </dependency>
 
         <!-- RDF dependencies -->
