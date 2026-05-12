@@ -185,7 +185,6 @@ class DataServiceHarvester(
             forceUpdate -> {
                 val updatedMeta = dbMeta.copy(
                     checksum = harvestedChecksum,
-                    modified = harvestDate.toInstant(),
                     harvestSource = harvestSource
                 )
                 resourceRepository.save(updatedMeta)
