@@ -117,18 +117,16 @@ class ConceptHarvester(
                     .updateDBOs(harvestDate, forceUpdate, harvestSource)
                     ?.let { meta ->
                         val graphWithRecords =
-                            conceptUriToCollectionFdkUri[it.resourceURI]?.let { collectionFdkUri ->
-                                it.harvested.union(
-                                    createConceptCatalogRecordModel(
-                                        conceptUri = it.resourceURI,
-                                        conceptFdkId = meta.fdkId,
-                                        collectionFdkUri = collectionFdkUri,
-                                        issued = meta.issued,
-                                        modified = meta.modified,
-                                        conceptUriBase = conceptUriBase,
-                                    ),
-                                )
-                            } ?: it.harvested
+                            it.harvested.union(
+                                createConceptCatalogRecordModel(
+                                    conceptUri = it.resourceURI,
+                                    conceptFdkId = meta.fdkId,
+                                    collectionFdkUri = conceptUriToCollectionFdkUri[it.resourceURI],
+                                    issued = meta.issued,
+                                    modified = meta.modified,
+                                    conceptUriBase = conceptUriBase,
+                                ),
+                            )
                         val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                         resourceGraphs[meta.fdkId] = graphString
                         FdkIdAndUri(fdkId = meta.fdkId, uri = it.resourceURI)

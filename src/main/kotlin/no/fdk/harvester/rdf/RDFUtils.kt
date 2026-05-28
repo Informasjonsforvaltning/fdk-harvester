@@ -240,7 +240,7 @@ fun createInformationModelCatalogRecordModel(
 fun createEventCatalogRecordModel(
     eventUri: String,
     eventFdkId: String,
-    catalogFdkUri: String,
+    catalogFdkUri: String?,
     issued: Instant,
     modified: Instant,
     eventUriBase: String,
@@ -248,14 +248,21 @@ fun createEventCatalogRecordModel(
     val metaModel = ModelFactory.createDefaultModel()
     metaModel.addMetaPrefixes()
     val fdkRecordUri = "$eventUriBase/$eventFdkId"
-    metaModel
-        .createResource(fdkRecordUri)
+    val metaResource = metaModel.createResource(fdkRecordUri)
+
+    metaResource
         .addProperty(RDF.type, DCAT.CatalogRecord)
         .addProperty(DCTerms.identifier, metaModel.createLiteral(eventFdkId))
         .addProperty(FOAF.primaryTopic, metaModel.createResource(eventUri))
-        .addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
         .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
         .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
+
+    if (catalogFdkUri == null) {
+        logger.error("The event $eventUri is missing associated catalog uri")
+    } else {
+        metaResource.addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
+    }
+
     return metaModel
 }
 
@@ -266,7 +273,7 @@ fun createEventCatalogRecordModel(
 fun createServiceCatalogRecordModel(
     serviceUri: String,
     serviceFdkId: String,
-    catalogFdkUri: String,
+    catalogFdkUri: String?,
     issued: Instant,
     modified: Instant,
     serviceUriBase: String,
@@ -274,14 +281,21 @@ fun createServiceCatalogRecordModel(
     val metaModel = ModelFactory.createDefaultModel()
     metaModel.addMetaPrefixes()
     val fdkRecordUri = "$serviceUriBase/$serviceFdkId"
-    metaModel
-        .createResource(fdkRecordUri)
+    val metaResource = metaModel.createResource(fdkRecordUri)
+
+    metaResource
         .addProperty(RDF.type, DCAT.CatalogRecord)
         .addProperty(DCTerms.identifier, metaModel.createLiteral(serviceFdkId))
         .addProperty(FOAF.primaryTopic, metaModel.createResource(serviceUri))
-        .addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
         .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
         .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
+
+    if (catalogFdkUri == null) {
+        logger.error("The service $serviceUri is missing associated catalog uri")
+    } else {
+        metaResource.addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
+    }
+
     return metaModel
 }
 
@@ -293,7 +307,7 @@ fun createServiceCatalogRecordModel(
 fun createConceptCatalogRecordModel(
     conceptUri: String,
     conceptFdkId: String,
-    collectionFdkUri: String,
+    collectionFdkUri: String?,
     issued: Instant,
     modified: Instant,
     conceptUriBase: String,
@@ -301,14 +315,21 @@ fun createConceptCatalogRecordModel(
     val metaModel = ModelFactory.createDefaultModel()
     metaModel.addMetaPrefixes()
     val fdkRecordUri = "$conceptUriBase/$conceptFdkId"
-    metaModel
-        .createResource(fdkRecordUri)
+    val metaResource = metaModel.createResource(fdkRecordUri)
+
+    metaResource
         .addProperty(RDF.type, DCAT.CatalogRecord)
         .addProperty(DCTerms.identifier, metaModel.createLiteral(conceptFdkId))
         .addProperty(FOAF.primaryTopic, metaModel.createResource(conceptUri))
-        .addProperty(DCTerms.isPartOf, metaModel.createResource(collectionFdkUri))
         .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
         .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
+
+    if (collectionFdkUri == null) {
+        logger.error("The concept $conceptUri is missing associated collection uri")
+    } else {
+        metaResource.addProperty(DCTerms.isPartOf, metaModel.createResource(collectionFdkUri))
+    }
+
     return metaModel
 }
 
