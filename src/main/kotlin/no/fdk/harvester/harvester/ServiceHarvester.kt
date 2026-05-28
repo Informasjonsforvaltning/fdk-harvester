@@ -221,21 +221,17 @@ class ServiceHarvester(
                     .updateDBOs(harvestDate, forceUpdate, harvestSource)
                     ?.let { meta ->
                         val catalogFdkUri = serviceUriToCatalogFdkUri[it.resourceURI]
-                        val graphWithRecords =
-                            if (catalogFdkUri != null) {
-                                val catalogRecordModel =
-                                    createServiceCatalogRecordModel(
-                                        serviceUri = meta.uri,
-                                        serviceFdkId = meta.fdkId,
-                                        catalogFdkUri = catalogFdkUri,
-                                        issued = meta.issued,
-                                        modified = meta.modified,
-                                        serviceUriBase = applicationProperties.serviceUri,
-                                    )
-                                it.harvested.union(catalogRecordModel)
-                            } else {
-                                it.harvested
-                            }
+
+                        val catalogRecordModel =
+                            createServiceCatalogRecordModel(
+                                serviceUri = meta.uri,
+                                serviceFdkId = meta.fdkId,
+                                catalogFdkUri = catalogFdkUri,
+                                issued = meta.issued,
+                                modified = meta.modified,
+                                serviceUriBase = applicationProperties.serviceUri,
+                            )
+                        val graphWithRecords = it.harvested.union(catalogRecordModel)
                         val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                         resourceGraphs[meta.fdkId] = graphString
                         FdkIdAndUri(fdkId = meta.fdkId, uri = it.resourceURI)

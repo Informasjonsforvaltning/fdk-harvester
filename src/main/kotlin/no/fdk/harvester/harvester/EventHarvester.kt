@@ -223,21 +223,17 @@ class EventHarvester(
                     .updateDBOs(harvestDate, forceUpdate, harvestSource)
                     ?.let { meta ->
                         val catalogFdkUri = eventUriToCatalogFdkUri[it.eventURI]
-                        val graphWithRecords =
-                            if (catalogFdkUri != null) {
-                                val catalogRecordModel =
-                                    createEventCatalogRecordModel(
-                                        eventUri = meta.uri,
-                                        eventFdkId = meta.fdkId,
-                                        catalogFdkUri = catalogFdkUri,
-                                        issued = meta.issued,
-                                        modified = meta.modified,
-                                        eventUriBase = applicationProperties.eventUri,
-                                    )
-                                it.harvested.union(catalogRecordModel)
-                            } else {
-                                it.harvested
-                            }
+
+                        val catalogRecordModel =
+                            createEventCatalogRecordModel(
+                                eventUri = meta.uri,
+                                eventFdkId = meta.fdkId,
+                                catalogFdkUri = catalogFdkUri,
+                                issued = meta.issued,
+                                modified = meta.modified,
+                                eventUriBase = applicationProperties.eventUri,
+                            )
+                        val graphWithRecords = it.harvested.union(catalogRecordModel)
                         val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                         resourceGraphs[meta.fdkId] = graphString
                         FdkIdAndUri(fdkId = meta.fdkId, uri = it.eventURI)
