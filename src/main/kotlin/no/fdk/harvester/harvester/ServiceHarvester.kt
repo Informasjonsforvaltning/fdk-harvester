@@ -16,7 +16,6 @@ import no.fdk.harvester.rdf.CV
 import no.fdk.harvester.rdf.DCATNO
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
-import no.fdk.harvester.rdf.createIdFromString
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.rdf.createServiceCatalogRecordModel
 import no.fdk.harvester.repository.HarvestSourceRepository
@@ -27,13 +26,11 @@ import org.apache.jena.rdf.model.Model
 import org.apache.jena.rdf.model.ModelFactory
 import org.apache.jena.rdf.model.RDFNode
 import org.apache.jena.rdf.model.Resource
-import org.apache.jena.rdf.model.ResourceFactory
 import org.apache.jena.rdf.model.Statement
 import org.apache.jena.riot.Lang
 import org.apache.jena.vocabulary.DCAT
 import org.apache.jena.vocabulary.DCTerms
 import org.apache.jena.vocabulary.RDF
-import org.apache.jena.vocabulary.RDFS
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.util.Calendar
@@ -151,15 +148,20 @@ class ServiceHarvester(
         val updatedCatalogs =
             catalogs
                 .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
-                .filter { forceUpdate || it.first.hasChanges(it.second, computeChecksum(it.first.harvested)) }
+                .filter { forceUpdate || checksumHasChanged(it.second, computeChecksum(it.first.harvested)) }
                 .map {
                     val dbMeta = it.second
                     val catalogChecksum = computeChecksum(it.first.harvested)
                     val updatedMeta =
-                        if (dbMeta == null || it.first.hasChanges(dbMeta, catalogChecksum)) {
-                            it.first
-                                .mapToResourceMeta(harvestDate, dbMeta, catalogChecksum, harvestSource)
-                                .also { resourceRepository.save(it) }
+                        if (dbMeta == null || checksumHasChanged(dbMeta, catalogChecksum)) {
+                            createResourceEntity(
+                                it.first.resourceURI,
+                                ResourceType.CATALOG,
+                                catalogChecksum,
+                                harvestDate,
+                                harvestSource,
+                                dbMeta,
+                            ).also { resourceRepository.save(it) }
                         } else {
                             if (forceUpdate) {
                                 dbMeta
@@ -176,35 +178,12 @@ class ServiceHarvester(
                     val catalogFdkUri =
                         "${applicationProperties.serviceUri.substringBeforeLast("/")}/catalogs/${updatedMeta.fdkId}"
                     it.first.services.forEach { serviceURI: String ->
-                        addIsPartOfToService(serviceURI, updatedMeta.uri)
                         serviceUriToCatalogFdkUri[serviceURI] = catalogFdkUri
                     }
 
                     FdkIdAndUri(fdkId = updatedMeta.fdkId, uri = updatedMeta.uri)
                 }
         return Pair(updatedCatalogs, serviceUriToCatalogFdkUri)
-    }
-
-    private fun ServiceCatalogRDFModel.mapToResourceMeta(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val catalogURI = resourceURI
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(catalogURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = catalogURI,
-            type = ResourceType.CATALOG,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
     }
 
     private fun updateServices(
@@ -250,8 +229,9 @@ class ServiceHarvester(
             validateSourceUrl(resourceURI, harvestSource, dbMeta)
             val harvestedChecksum = computeChecksum(harvested)
             return when {
-                dbMeta == null || dbMeta.removed || hasChanges(dbMeta, harvestedChecksum) -> {
-                    val updatedMeta = mapToResourceMeta(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+                dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
+                    val updatedMeta =
+                        createResourceEntity(resourceURI, ResourceType.SERVICE, harvestedChecksum, harvestDate, harvestSource, dbMeta)
                     resourceRepository.save(updatedMeta)
                     updatedMeta
                 }
@@ -276,27 +256,6 @@ class ServiceHarvester(
         }
     }
 
-    private fun ServiceRDFModel.mapToResourceMeta(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(resourceURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = resourceURI,
-            type = ResourceType.SERVICE,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
     private fun getServicesRemovedThisHarvest(
         services: List<String>,
         harvestSource: HarvestSourceEntity,
@@ -304,34 +263,6 @@ class ServiceHarvester(
         resourceRepository
             .findAllByType(ResourceType.SERVICE)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed && !services.contains(it.uri) }
-
-    private fun addIsPartOfToService(
-        serviceURI: String,
-        catalogURI: String,
-    ) {
-        // Note: isPartOf relationship tracking removed - using harvestSource instead
-        // This method kept for compatibility but does nothing
-    }
-
-    private fun ServiceRDFModel.hasChanges(
-        dbMeta: ResourceEntity?,
-        harvestedChecksum: String,
-    ): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            harvestedChecksum != dbMeta.checksum
-        }
-
-    private fun ServiceCatalogRDFModel.hasChanges(
-        dbMeta: ResourceEntity?,
-        harvestedChecksum: String,
-    ): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            harvestedChecksum != dbMeta.checksum
-        }
 
     private fun splitCatalogsFromRDF(
         harvested: Model,
@@ -509,43 +440,10 @@ class ServiceHarvester(
             .createResource(catalogURI)
             .addProperty(RDF.type, DCAT.Catalog)
             .addPublisherForGeneratedCatalog(organization?.uri)
-            .addLabelForGeneratedCatalog(organization)
+            .addLabelForGeneratedCatalog(organization, "Tjenestekatalog", "Service catalog")
             .addServicesForGeneratedCatalog(services)
 
         return catalogModel
-    }
-
-    private fun Resource.addPublisherForGeneratedCatalog(publisherURI: String?): Resource {
-        if (publisherURI != null) {
-            addProperty(
-                DCTerms.publisher,
-                ResourceFactory.createResource(publisherURI),
-            )
-        }
-
-        return this
-    }
-
-    private fun Resource.addLabelForGeneratedCatalog(organization: Organization?): Resource {
-        val nb: String? = organization?.prefLabel?.nb ?: organization?.name
-        if (!nb.isNullOrBlank()) {
-            val label = model.createLiteral("$nb - Tjenestekatalog", "nb")
-            addProperty(RDFS.label, label)
-        }
-
-        val nn: String? = organization?.prefLabel?.nn ?: organization?.name
-        if (!nn.isNullOrBlank()) {
-            val label = model.createLiteral("$nn - Tjenestekatalog", "nn")
-            addProperty(RDFS.label, label)
-        }
-
-        val en: String? = organization?.prefLabel?.en ?: organization?.name
-        if (!en.isNullOrBlank()) {
-            val label = model.createLiteral("$en - Service catalog", "en")
-            addProperty(RDFS.label, label)
-        }
-
-        return this
     }
 
     private fun Resource.addServicesForGeneratedCatalog(services: Set<String>): Resource {

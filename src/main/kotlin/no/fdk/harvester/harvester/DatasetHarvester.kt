@@ -12,7 +12,6 @@ import no.fdk.harvester.rdf.DCAT3
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
 import no.fdk.harvester.rdf.createDatasetCatalogRecordModel
-import no.fdk.harvester.rdf.createIdFromString
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
@@ -66,15 +65,20 @@ class DatasetHarvester(
             validateSourceUrl(catalog.resource.uri, harvestSource, dbCatalog)
         }
         catalogPairs
-            .filter { forceUpdate || it.first.catalogHasChanges(it.second) }
+            .filter { forceUpdate || checksumHasChanged(it.second, computeChecksum(it.first.harvestedCatalog)) }
             .forEach {
                 val dbMeta = it.second
                 val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
                 val catalogMeta =
-                    if (dbMeta == null || it.first.catalogHasChanges(dbMeta)) {
-                        it.first
-                            .mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
-                            .also { updatedMeta -> resourceRepository.save(updatedMeta) }
+                    if (dbMeta == null || checksumHasChanged(dbMeta, catalogChecksum)) {
+                        createResourceEntity(
+                            it.first.resource.uri,
+                            ResourceType.CATALOG,
+                            catalogChecksum,
+                            harvestDate,
+                            harvestSource,
+                            dbMeta,
+                        ).also { updatedMeta -> resourceRepository.save(updatedMeta) }
                     } else {
                         if (forceUpdate) {
                             dbMeta
@@ -172,8 +176,9 @@ class DatasetHarvester(
         val dbMeta = resourceRepository.findByIdOrNull(resource.uri)
         val harvestedChecksum = computeChecksum(harvestedDataset)
         return when {
-            dbMeta == null || dbMeta.removed || datasetHasChanges(dbMeta) -> {
-                val datasetMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+            dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
+                val datasetMeta =
+                    createResourceEntity(resource.uri, ResourceType.DATASET, harvestedChecksum, harvestDate, harvestSource, dbMeta)
                 resourceRepository.save(datasetMeta)
                 datasetMeta
             }
@@ -192,65 +197,6 @@ class DatasetHarvester(
                 null
             }
         }
-    }
-
-    private fun CatalogAndDatasetModels.catalogHasChanges(dbMeta: ResourceEntity?): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            val harvestedChecksum = computeChecksum(harvestedCatalog)
-            harvestedChecksum != dbMeta.checksum
-        }
-
-    private fun DatasetModel.datasetHasChanges(dbMeta: ResourceEntity?): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            val harvestedChecksum = computeChecksum(harvestedDataset)
-            harvestedChecksum != dbMeta.checksum
-        }
-
-    private fun CatalogAndDatasetModels.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val catalogURI = resource.uri
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(catalogURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = catalogURI,
-            type = ResourceType.CATALOG,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
-    private fun DatasetModel.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(resource.uri)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = resource.uri,
-            type = ResourceType.DATASET,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
     }
 
     private fun extractCatalogs(

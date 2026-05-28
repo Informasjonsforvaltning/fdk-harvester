@@ -11,7 +11,6 @@ import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.ModellDCATAPNO
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
-import no.fdk.harvester.rdf.createIdFromString
 import no.fdk.harvester.rdf.createInformationModelCatalogRecordModel
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
@@ -71,15 +70,20 @@ class InformationModelHarvester(
             )
         }
         catalogPairs
-            .filter { forceUpdate || it.first.catalogHasChanges(it.second) }
+            .filter { forceUpdate || checksumHasChanged(it.second, computeChecksum(it.first.harvestedCatalog)) }
             .forEach {
                 val dbMeta = it.second
                 val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
                 val updatedCatalogMeta =
-                    if (dbMeta == null || it.first.catalogHasChanges(dbMeta)) {
-                        it.first
-                            .mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
-                            .also { resourceRepository.save(it) }
+                    if (dbMeta == null || checksumHasChanged(dbMeta, catalogChecksum)) {
+                        createResourceEntity(
+                            it.first.resourceURI,
+                            ResourceType.CATALOG,
+                            catalogChecksum,
+                            harvestDate,
+                            harvestSource,
+                            dbMeta,
+                        ).also { resourceRepository.save(it) }
                     } else {
                         if (forceUpdate) {
                             dbMeta
@@ -181,8 +185,9 @@ class InformationModelHarvester(
         val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
         val harvestedChecksum = computeChecksum(harvested)
         return when {
-            dbMeta == null || dbMeta.removed || modelHasChanges(dbMeta) -> {
-                val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+            dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
+                val updatedMeta =
+                    createResourceEntity(resourceURI, ResourceType.INFORMATIONMODEL, harvestedChecksum, harvestDate, harvestSource, dbMeta)
                 resourceRepository.save(updatedMeta)
                 updatedMeta
             }
@@ -202,65 +207,6 @@ class InformationModelHarvester(
             }
         }
     }
-
-    private fun CatalogAndInfoModels.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val catalogURI = resourceURI
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(catalogURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = catalogURI,
-            type = ResourceType.CATALOG,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
-    private fun InformationModelRDFModel.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(resourceURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = resourceURI,
-            type = ResourceType.INFORMATIONMODEL,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
-    private fun CatalogAndInfoModels.catalogHasChanges(dbMeta: ResourceEntity?): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            val harvestedChecksum = computeChecksum(harvestedCatalog)
-            harvestedChecksum != dbMeta.checksum
-        }
-
-    private fun InformationModelRDFModel.modelHasChanges(dbMeta: ResourceEntity?): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            val harvestedChecksum = computeChecksum(harvested)
-            harvestedChecksum != dbMeta.checksum
-        }
 
     private fun splitCatalogsFromRDF(
         harvested: Model,
