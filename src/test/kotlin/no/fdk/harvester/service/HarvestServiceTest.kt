@@ -20,6 +20,7 @@ import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
@@ -548,6 +549,225 @@ class HarvestServiceTest {
 
         assertEquals(0, result.removedResources.size)
         verify(exactly = 0) { resourceRepository.save(any<ResourceEntity>()) }
+    }
+
+    @Test
+    fun `executeHarvest returns null for all data types when corresponding harvester is null`() {
+        val service =
+            HarvestService(
+                conceptHarvester = null,
+                datasetHarvester = null,
+                dataServiceHarvester = null,
+                informationModelHarvester = null,
+                serviceHarvester = null,
+                eventHarvester = null,
+                resourceRepository = resourceRepository,
+                harvestSourceRepository = harvestSourceRepository,
+            )
+        every { harvestSourceRepository.findByUri(any()) } returns initializedSource()
+
+        val dataTypes =
+            listOf(
+                DataType.concept,
+                DataType.dataset,
+                DataType.dataservice,
+                DataType.informationmodel,
+                DataType.service,
+                DataType.publicService,
+                DataType.event,
+            )
+        for (dataType in dataTypes) {
+            val result =
+                service.executeHarvest(
+                    dataSourceId = "ds-1",
+                    dataSourceUrl = "http://example.org/source",
+                    dataType = dataType,
+                    acceptHeader = "text/turtle",
+                    runId = "run-1",
+                    forced = false,
+                )
+            assertNull(result, "Expected null for dataType $dataType when harvester is null")
+        }
+    }
+
+    @Test
+    fun `markResourcesAsDeleted concept data type matches concept resources`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val resource =
+            ResourceEntity(
+                uri = "http://example.org/concept1",
+                type = ResourceType.CONCEPT,
+                fdkId = "fdk-c",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "x",
+                harvestSource = source,
+            )
+        every { harvestSourceRepository.findByUri("http://example.org/source") } returns source
+        every { resourceRepository.findAllByHarvestSourceId(1L) } returns listOf(resource)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result =
+            harvestService.markResourcesAsDeleted(
+                sourceUrl = "http://example.org/source",
+                dataType = DataType.concept,
+                dataSourceId = "ds-1",
+                runId = "run-1",
+            )
+
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-c", result.removedResources[0].fdkId)
+    }
+
+    @Test
+    fun `markResourcesAsDeleted dataservice data type matches dataservice resources`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val resource =
+            ResourceEntity(
+                uri = "http://example.org/ds1",
+                type = ResourceType.DATASERVICE,
+                fdkId = "fdk-dservice",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "x",
+                harvestSource = source,
+            )
+        every { harvestSourceRepository.findByUri("http://example.org/source") } returns source
+        every { resourceRepository.findAllByHarvestSourceId(1L) } returns listOf(resource)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result =
+            harvestService.markResourcesAsDeleted(
+                sourceUrl = "http://example.org/source",
+                dataType = DataType.dataservice,
+                dataSourceId = "ds-1",
+                runId = "run-1",
+            )
+
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-dservice", result.removedResources[0].fdkId)
+    }
+
+    @Test
+    fun `markResourcesAsDeleted informationmodel data type matches informationmodel resources`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val resource =
+            ResourceEntity(
+                uri = "http://example.org/im1",
+                type = ResourceType.INFORMATIONMODEL,
+                fdkId = "fdk-im",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "x",
+                harvestSource = source,
+            )
+        every { harvestSourceRepository.findByUri("http://example.org/source") } returns source
+        every { resourceRepository.findAllByHarvestSourceId(1L) } returns listOf(resource)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result =
+            harvestService.markResourcesAsDeleted(
+                sourceUrl = "http://example.org/source",
+                dataType = DataType.informationmodel,
+                dataSourceId = "ds-1",
+                runId = "run-1",
+            )
+
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-im", result.removedResources[0].fdkId)
+    }
+
+    @Test
+    fun `markResourcesAsDeleted service data type matches service resources`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val resource =
+            ResourceEntity(
+                uri = "http://example.org/service1",
+                type = ResourceType.SERVICE,
+                fdkId = "fdk-svc",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "x",
+                harvestSource = source,
+            )
+        every { harvestSourceRepository.findByUri("http://example.org/source") } returns source
+        every { resourceRepository.findAllByHarvestSourceId(1L) } returns listOf(resource)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result =
+            harvestService.markResourcesAsDeleted(
+                sourceUrl = "http://example.org/source",
+                dataType = DataType.service,
+                dataSourceId = "ds-1",
+                runId = "run-1",
+            )
+
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-svc", result.removedResources[0].fdkId)
+    }
+
+    @Test
+    fun `markResourcesAsDeleted publicService data type matches service resources`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val resource =
+            ResourceEntity(
+                uri = "http://example.org/service1",
+                type = ResourceType.SERVICE,
+                fdkId = "fdk-svc",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "x",
+                harvestSource = source,
+            )
+        every { harvestSourceRepository.findByUri("http://example.org/source") } returns source
+        every { resourceRepository.findAllByHarvestSourceId(1L) } returns listOf(resource)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result =
+            harvestService.markResourcesAsDeleted(
+                sourceUrl = "http://example.org/source",
+                dataType = DataType.publicService,
+                dataSourceId = "ds-1",
+                runId = "run-1",
+            )
+
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-svc", result.removedResources[0].fdkId)
+    }
+
+    @Test
+    fun `markResourcesAsDeleted event data type matches event resources`() {
+        val source = HarvestSourceEntity(id = 1L, uri = "http://example.org/source", checksum = "c", issued = Instant.now())
+        val resource =
+            ResourceEntity(
+                uri = "http://example.org/event1",
+                type = ResourceType.EVENT,
+                fdkId = "fdk-ev",
+                removed = false,
+                issued = Instant.now(),
+                modified = Instant.now(),
+                checksum = "x",
+                harvestSource = source,
+            )
+        every { harvestSourceRepository.findByUri("http://example.org/source") } returns source
+        every { resourceRepository.findAllByHarvestSourceId(1L) } returns listOf(resource)
+        every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+
+        val result =
+            harvestService.markResourcesAsDeleted(
+                sourceUrl = "http://example.org/source",
+                dataType = DataType.event,
+                dataSourceId = "ds-1",
+                runId = "run-1",
+            )
+
+        assertEquals(1, result.removedResources.size)
+        assertEquals("fdk-ev", result.removedResources[0].fdkId)
     }
 
     private fun createReport(dataType: String): HarvestReport =

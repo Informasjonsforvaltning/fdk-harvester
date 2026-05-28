@@ -528,6 +528,84 @@ class HarvesterHappyPathTest {
         }
     }
 
+    @Test
+    fun `dataset harvester - marks previously harvested datasets as removed when absent from new harvest`() {
+        val ttl =
+            """
+            @prefix dcat: <http://www.w3.org/ns/dcat#> .
+            @prefix dct: <http://purl.org/dc/terms/> .
+            <http://example.org/catalog> a dcat:Catalog ;
+              dcat:dataset <http://example.org/dataset1> .
+            <http://example.org/dataset1> a dcat:Dataset ; dct:title "Dataset 1" .
+            """.trimIndent()
+
+        val server = wireMock(ttl)
+        try {
+            val harvestSourceEntity =
+                HarvestSourceEntity(
+                    id = 1L,
+                    uri = "http://localhost:${server.port()}/rdf",
+                    checksum = "old",
+                    issued = Instant.now(),
+                )
+            val staleDataset =
+                ResourceEntity(
+                    uri = "http://example.org/old-dataset",
+                    type = ResourceType.DATASET,
+                    fdkId = "fdk-old",
+                    removed = false,
+                    issued = Instant.now(),
+                    modified = Instant.now(),
+                    checksum = "stale",
+                    harvestSource = harvestSourceEntity,
+                )
+
+            val resourceRepository = mockk<ResourceRepository>()
+            every { resourceRepository.findById(any<String>()) } returns Optional.empty()
+            every { resourceRepository.findAllByType(ResourceType.DATASET) } returns listOf(staleDataset)
+            every { resourceRepository.findAllByTypeAndRemoved(any(), any()) } returns emptyList()
+            every { resourceRepository.findByFdkId(any()) } returns null
+            every { resourceRepository.findAllByFdkId(any()) } returns emptyList()
+            every { resourceRepository.save(any<ResourceEntity>()) } answers { firstArg() }
+            every { resourceRepository.saveAll(any<Iterable<ResourceEntity>>()) } answers { firstArg<Iterable<ResourceEntity>>().toList() }
+
+            val harvestSourceRepository = mockk<HarvestSourceRepository>()
+            every { harvestSourceRepository.findByUri(any()) } returns null
+            every { harvestSourceRepository.save(any()) } answers { firstArg<HarvestSourceEntity>().copy(id = 1L) }
+
+            val producer = mockk<ResourceEventProducer>(relaxed = true)
+
+            val appProps = ApplicationProperties(datasetUri = "https://datasets.fellesdatakatalog.digdir.no/datasets")
+            val harvester = DatasetHarvester(appProps, resourceRepository, harvestSourceRepository, producer)
+            val report =
+                harvester.harvestDatasetCatalog(
+                    source =
+                        HarvestDataSource(
+                            id = "source-1",
+                            url = "http://localhost:${server.port()}/rdf",
+                            acceptHeaderValue = "text/turtle",
+                        ),
+                    harvestDate = Calendar.getInstance(),
+                    forceUpdate = false,
+                    runId = "run-1",
+                )
+
+            assertNotNull(report)
+            assertFalse(report!!.harvestError)
+            assertEquals(1, report.removedResources.size, "stale dataset should be reported as removed")
+            assertEquals("http://example.org/old-dataset", report.removedResources.first().uri)
+            verify(exactly = 1) {
+                producer.publishRemovedEvents(
+                    dataType = DataType.dataset,
+                    resources = match { it.any { r -> r.uri == "http://example.org/old-dataset" } },
+                    runId = "run-1",
+                )
+            }
+        } finally {
+            server.stop()
+        }
+    }
+
     private fun wireMock(turtle: String): WireMockServer {
         val server = WireMockServer(wireMockConfig().dynamicPort())
         server.start()

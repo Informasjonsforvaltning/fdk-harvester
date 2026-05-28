@@ -23,6 +23,7 @@ import org.apache.avro.io.EncoderFactory
 import org.apache.avro.specific.SpecificDatumReader
 import org.apache.avro.specific.SpecificDatumWriter
 import org.apache.avro.specific.SpecificRecord
+import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Tag
@@ -253,5 +254,82 @@ class ResourceEventProducerTest {
 
         run(DataType.event, "event-events")
         assertEquals(EventEventType.EVENT_REMOVED, (records.single() as EventEvent).type)
+    }
+
+    @Test
+    fun `publishHarvestedEvents catches kafka exception and does not propagate it`() {
+        val producer =
+            ResourceEventProducer(
+                kafkaTemplate = kafkaTemplate,
+                datasetEventsTopic = "dataset-events",
+                conceptEventsTopic = "concept-events",
+                dataServiceEventsTopic = "data-service-events",
+                informationModelEventsTopic = "information-model-events",
+                serviceEventsTopic = "service-events",
+                eventEventsTopic = "event-events",
+            )
+
+        every { kafkaTemplate.send(any<String>(), any<String>(), any()) } throws RuntimeException("Kafka unavailable")
+
+        assertDoesNotThrow {
+            producer.publishHarvestedEvents(
+                dataType = DataType.dataset,
+                resources = listOf(FdkIdAndUri(fdkId = "fdk-1", uri = "http://example.org/ds1")),
+                resourceGraphs = mapOf("fdk-1" to "<ttl>"),
+                runId = "run-1",
+            )
+        }
+    }
+
+    @Test
+    fun `publishRemovedEvents catches kafka exception and does not propagate it`() {
+        val producer =
+            ResourceEventProducer(
+                kafkaTemplate = kafkaTemplate,
+                datasetEventsTopic = "dataset-events",
+                conceptEventsTopic = "concept-events",
+                dataServiceEventsTopic = "data-service-events",
+                informationModelEventsTopic = "information-model-events",
+                serviceEventsTopic = "service-events",
+                eventEventsTopic = "event-events",
+            )
+
+        every { kafkaTemplate.send(any<String>(), any<String>(), any()) } throws RuntimeException("Kafka unavailable")
+
+        assertDoesNotThrow {
+            producer.publishRemovedEvents(
+                dataType = DataType.concept,
+                resources = listOf(FdkIdAndUri(fdkId = "fdk-1", uri = "http://example.org/c1")),
+                runId = "run-1",
+            )
+        }
+    }
+
+    @Test
+    fun `publishHarvestedEvents uses empty graph when fdkId is absent from resourceGraphs`() {
+        val producer =
+            ResourceEventProducer(
+                kafkaTemplate = kafkaTemplate,
+                datasetEventsTopic = "dataset-events",
+                conceptEventsTopic = "concept-events",
+                dataServiceEventsTopic = "data-service-events",
+                informationModelEventsTopic = "information-model-events",
+                serviceEventsTopic = "service-events",
+                eventEventsTopic = "event-events",
+            )
+
+        val recordSlot = slot<SpecificRecord>()
+        every { kafkaTemplate.send(any<String>(), any<String>(), capture(recordSlot)) } returns
+            CompletableFuture.completedFuture(mockk<SendResult<String, SpecificRecord>>())
+
+        producer.publishHarvestedEvents(
+            dataType = DataType.dataset,
+            resources = listOf(FdkIdAndUri(fdkId = "fdk-missing", uri = "http://example.org/ds1")),
+            resourceGraphs = emptyMap(),
+            runId = "run-1",
+        )
+
+        val record = recordSlot.captured as DatasetEvent
+        assertEquals("", record.graph.toString())
     }
 }

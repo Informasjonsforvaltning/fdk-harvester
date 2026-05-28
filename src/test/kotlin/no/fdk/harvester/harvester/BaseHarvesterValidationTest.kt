@@ -2,12 +2,15 @@ package no.fdk.harvester.harvester
 
 import com.github.tomakehurst.wiremock.WireMockServer
 import com.github.tomakehurst.wiremock.client.WireMock.aResponse
+import com.github.tomakehurst.wiremock.client.WireMock.equalTo
 import com.github.tomakehurst.wiremock.client.WireMock.get
+import com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor
 import com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo
 import com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig
 import io.mockk.every
 import io.mockk.mockk
+import no.fdk.harvester.model.AuthHeader
 import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestReport
 import no.fdk.harvester.model.HarvestSourceEntity
@@ -174,6 +177,87 @@ class BaseHarvesterValidationTest {
 
             assertNotNull(report)
             assertFalse(report!!.harvestError)
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `fetchContent sends custom authorization header when authHeader is present`() {
+        val ttl =
+            """
+            @prefix ex: <http://example.org/> .
+            ex:s ex:p ex:o .
+            """.trimIndent()
+
+        val server = WireMockServer(wireMockConfig().dynamicPort())
+        server.start()
+        try {
+            server.stubFor(
+                get(urlEqualTo("/rdf"))
+                    .willReturn(
+                        aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "text/turtle")
+                            .withBody(ttl),
+                    ),
+            )
+
+            val repo = mockk<HarvestSourceRepository>()
+            every { repo.findByUri(any()) } returns null
+            every { repo.save(any()) } answers { firstArg<HarvestSourceEntity>().copy(id = 1L) }
+
+            val harvester = TestHarvester(repo)
+            val report =
+                harvester.harvest(
+                    source =
+                        HarvestDataSource(
+                            id = "s1",
+                            url = "http://localhost:${server.port()}/rdf",
+                            acceptHeaderValue = "text/turtle",
+                            authHeader = AuthHeader(type = "X-Auth-Token", value = "secret"),
+                        ),
+                    harvestDate = Calendar.getInstance(),
+                )
+
+            assertNotNull(report)
+            assertFalse(report!!.harvestError)
+            server.verify(getRequestedFor(urlEqualTo("/rdf")).withHeader("X-Auth-Token", equalTo("secret")))
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `fetchContent returns error report when content-length header exceeds maximum size`() {
+        val server = WireMockServer(wireMockConfig().dynamicPort())
+        server.start()
+        try {
+            server.stubFor(
+                get(urlEqualTo("/rdf"))
+                    .willReturn(
+                        aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Length", "${75 * 1024 * 1024 + 1}")
+                            .withBody("small body"),
+                    ),
+            )
+
+            val repo = mockk<HarvestSourceRepository>()
+            val harvester = TestHarvester(repo)
+            val report =
+                harvester.harvest(
+                    source =
+                        HarvestDataSource(
+                            id = "s1",
+                            url = "http://localhost:${server.port()}/rdf",
+                            acceptHeaderValue = "text/turtle",
+                        ),
+                    harvestDate = Calendar.getInstance(),
+                )
+
+            assertNotNull(report)
+            assertTrue(report!!.harvestError)
         } finally {
             server.stop()
         }
