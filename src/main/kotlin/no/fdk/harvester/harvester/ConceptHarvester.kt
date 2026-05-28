@@ -155,8 +155,9 @@ class ConceptHarvester(
             validateSourceUrl(resourceURI, harvestSource, dbMeta)
             val harvestedChecksum = computeChecksum(harvested)
             return when {
-                dbMeta == null || dbMeta.removed || conceptHasChanges(dbMeta, harvestedChecksum) -> {
-                    val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+                dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
+                    val updatedMeta =
+                        createResourceEntity(resourceURI, ResourceType.CONCEPT, harvestedChecksum, harvestDate, harvestSource, dbMeta)
                     resourceRepository.save(updatedMeta)
                     updatedMeta
                 }
@@ -204,15 +205,20 @@ class ConceptHarvester(
         val updated =
             collections
                 .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
-                .filter { forceUpdate || it.first.collectionHasChanges(it.second, computeChecksum(it.first.harvested)) }
+                .filter { forceUpdate || checksumHasChanged(it.second, computeChecksum(it.first.harvested)) }
                 .map {
                     val dbMeta = it.second
                     val collectionChecksum = computeChecksum(it.first.harvested)
                     val collectionMeta =
-                        if (dbMeta == null || it.first.collectionHasChanges(dbMeta, collectionChecksum)) {
-                            it.first
-                                .mapToResource(harvestDate, dbMeta, collectionChecksum, harvestSource)
-                                .also { updatedMeta -> resourceRepository.save(updatedMeta) }
+                        if (dbMeta == null || checksumHasChanged(dbMeta, collectionChecksum)) {
+                            createResourceEntity(
+                                it.first.resourceURI,
+                                ResourceType.COLLECTION,
+                                collectionChecksum,
+                                harvestDate,
+                                harvestSource,
+                                dbMeta,
+                            ).also { updatedMeta -> resourceRepository.save(updatedMeta) }
                         } else {
                             if (forceUpdate) {
                                 dbMeta
@@ -225,84 +231,10 @@ class ConceptHarvester(
                                 dbMeta
                             }
                         }
-                    it.first.concepts.forEach { conceptURI ->
-                        addIsPartOfToConcept(conceptURI, collectionMeta.uri)
-                    }
                     FdkIdAndUri(fdkId = collectionMeta.fdkId, uri = collectionMeta.uri)
                 }
         return Pair(updated, conceptUriToCollectionFdkUri)
     }
-
-    private fun CollectionRDFModel.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val collectionURI = resourceURI
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(collectionURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = collectionURI,
-            type = ResourceType.COLLECTION,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
-    private fun ConceptRDFModel.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(resourceURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = resourceURI,
-            type = ResourceType.CONCEPT,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
-    private fun addIsPartOfToConcept(
-        conceptURI: String,
-        collectionURI: String,
-    ) {
-        // Note: isPartOf relationship tracking removed - using harvestSource instead
-        // This method kept for compatibility but does nothing
-    }
-
-    private fun CollectionRDFModel.collectionHasChanges(
-        dbMeta: ResourceEntity?,
-        harvestedChecksum: String,
-    ): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            harvestedChecksum != dbMeta.checksum
-        }
-
-    private fun ConceptRDFModel.conceptHasChanges(
-        dbMeta: ResourceEntity?,
-        harvestedChecksum: String,
-    ): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            harvestedChecksum != dbMeta.checksum
-        }
 
     private fun getConceptsRemovedThisHarvest(
         concepts: List<String>,

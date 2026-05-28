@@ -1,7 +1,10 @@
 package no.fdk.harvester.harvester
 
 import no.fdk.harvester.Application
+import no.fdk.harvester.model.HarvestSourceEntity
 import no.fdk.harvester.model.Organization
+import no.fdk.harvester.model.ResourceEntity
+import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.containsTriple
 import no.fdk.harvester.rdf.createIdFromString
 import no.fdk.harvester.rdf.createRDFResponse
@@ -236,42 +239,33 @@ private fun createModelForHarvestSourceCollection(
     collectionModel
         .createResource(collectionURI)
         .addProperty(RDF.type, SKOS.Collection)
-        .addPublisherForGeneratedCollection(organization?.uri)
-        .addLabelForGeneratedCollection(organization)
+        .addPublisherForGeneratedCatalog(organization?.uri)
+        .addLabelForGeneratedCatalog(organization, "Begrepssamling", "Concept collection")
         .addMembersForGeneratedCollection(concepts)
 
     return collectionModel
 }
 
-private fun Resource.addPublisherForGeneratedCollection(publisherURI: String?): Resource {
+internal fun Resource.addPublisherForGeneratedCatalog(publisherURI: String?): Resource {
     if (publisherURI != null) {
-        addProperty(
-            DCTerms.publisher,
-            ResourceFactory.createResource(publisherURI),
-        )
+        addProperty(DCTerms.publisher, ResourceFactory.createResource(publisherURI))
     }
-
     return this
 }
 
-private fun Resource.addLabelForGeneratedCollection(organization: Organization?): Resource {
+internal fun Resource.addLabelForGeneratedCatalog(
+    organization: Organization?,
+    nbnnSuffix: String,
+    enSuffix: String,
+): Resource {
     val nb: String? = organization?.prefLabel?.nb ?: organization?.name
-    if (!nb.isNullOrBlank()) {
-        val label = model.createLiteral("$nb - Begrepssamling", "nb")
-        addProperty(RDFS.label, label)
-    }
+    if (!nb.isNullOrBlank()) addProperty(RDFS.label, model.createLiteral("$nb - $nbnnSuffix", "nb"))
 
     val nn: String? = organization?.prefLabel?.nn ?: organization?.name
-    if (!nn.isNullOrBlank()) {
-        val label = model.createLiteral("$nn - Begrepssamling", "nn")
-        addProperty(RDFS.label, label)
-    }
+    if (!nn.isNullOrBlank()) addProperty(RDFS.label, model.createLiteral("$nn - $nbnnSuffix", "nn"))
 
     val en: String? = organization?.prefLabel?.en ?: organization?.name
-    if (!en.isNullOrBlank()) {
-        val label = model.createLiteral("$en - Concept collection", "en")
-        addProperty(RDFS.label, label)
-    }
+    if (!en.isNullOrBlank()) addProperty(RDFS.label, model.createLiteral("$en - $enSuffix", "en"))
 
     return this
 }
@@ -345,6 +339,30 @@ fun Calendar.formatWithOsloTimeZone(): String =
     ZonedDateTime
         .from(toInstant().atZone(ZoneId.of("Europe/Oslo")))
         .format(DateTimeFormatter.ofPattern(DATE_FORMAT))
+
+fun createResourceEntity(
+    uri: String,
+    type: ResourceType,
+    checksum: String,
+    harvestDate: Calendar,
+    harvestSource: HarvestSourceEntity,
+    dbMeta: ResourceEntity?,
+): ResourceEntity =
+    ResourceEntity(
+        uri = uri,
+        type = type,
+        fdkId = dbMeta?.fdkId ?: createIdFromString(uri),
+        removed = false,
+        issued = dbMeta?.issued ?: harvestDate.toInstant(),
+        modified = harvestDate.toInstant(),
+        checksum = checksum,
+        harvestSource = harvestSource,
+    )
+
+fun checksumHasChanged(
+    dbMeta: ResourceEntity?,
+    checksum: String,
+): Boolean = dbMeta == null || checksum != dbMeta.checksum
 
 class HarvestException(
     url: String,

@@ -15,7 +15,6 @@ import no.fdk.harvester.rdf.DCATNO
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
 import no.fdk.harvester.rdf.createEventCatalogRecordModel
-import no.fdk.harvester.rdf.createIdFromString
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
@@ -24,13 +23,10 @@ import org.apache.jena.query.QueryFactory
 import org.apache.jena.rdf.model.Model
 import org.apache.jena.rdf.model.ModelFactory
 import org.apache.jena.rdf.model.Resource
-import org.apache.jena.rdf.model.ResourceFactory
 import org.apache.jena.rdf.model.Statement
 import org.apache.jena.riot.Lang
 import org.apache.jena.vocabulary.DCAT
-import org.apache.jena.vocabulary.DCTerms
 import org.apache.jena.vocabulary.RDF
-import org.apache.jena.vocabulary.RDFS
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.util.Calendar
@@ -153,15 +149,20 @@ class EventHarvester(
         val updatedCatalogs =
             catalogs
                 .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
-                .filter { forceUpdate || it.first.catalogHasChanges(it.second, computeChecksum(it.first.harvestedCatalog)) }
+                .filter { forceUpdate || checksumHasChanged(it.second, computeChecksum(it.first.harvestedCatalog)) }
                 .map {
                     val dbMeta = it.second
                     val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
                     val catalogMeta =
-                        if (dbMeta == null || it.first.catalogHasChanges(dbMeta, catalogChecksum)) {
-                            it.first
-                                .mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
-                                .also { updatedMeta -> resourceRepository.save(updatedMeta) }
+                        if (dbMeta == null || checksumHasChanged(dbMeta, catalogChecksum)) {
+                            createResourceEntity(
+                                it.first.resourceURI,
+                                ResourceType.CATALOG,
+                                catalogChecksum,
+                                harvestDate,
+                                harvestSource,
+                                dbMeta,
+                            ).also { updatedMeta -> resourceRepository.save(updatedMeta) }
                         } else {
                             if (forceUpdate) {
                                 dbMeta
@@ -178,35 +179,12 @@ class EventHarvester(
                     val catalogFdkUri =
                         "${applicationProperties.eventUri.substringBeforeLast("/")}/catalogs/${catalogMeta.fdkId}"
                     it.first.events.forEach { eventURI ->
-                        addIsPartOfToEvents(eventURI, catalogMeta.uri)
                         eventUriToCatalogFdkUri[eventURI] = catalogFdkUri
                     }
 
                     FdkIdAndUri(fdkId = catalogMeta.fdkId, uri = catalogMeta.uri)
                 }
         return Pair(updatedCatalogs, eventUriToCatalogFdkUri)
-    }
-
-    private fun CatalogAndEventModels.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val catalogURI = resourceURI
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(catalogURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = catalogURI,
-            type = ResourceType.CATALOG,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
     }
 
     private fun updateEvents(
@@ -252,8 +230,9 @@ class EventHarvester(
             validateSourceUrl(eventURI, harvestSource, dbMeta)
             val harvestedChecksum = computeChecksum(harvested)
             return when {
-                dbMeta == null || dbMeta.removed || hasChanges(dbMeta, harvestedChecksum) -> {
-                    val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+                dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
+                    val updatedMeta =
+                        createResourceEntity(eventURI, ResourceType.EVENT, harvestedChecksum, harvestDate, harvestSource, dbMeta)
                     resourceRepository.save(updatedMeta)
                     updatedMeta
                 }
@@ -278,27 +257,6 @@ class EventHarvester(
         }
     }
 
-    private fun EventRDFModel.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(eventURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = eventURI,
-            type = ResourceType.EVENT,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
     private fun getEventsRemovedThisHarvest(
         events: List<String>,
         harvestSource: HarvestSourceEntity,
@@ -306,34 +264,6 @@ class EventHarvester(
         resourceRepository
             .findAllByType(ResourceType.EVENT)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed && !events.contains(it.uri) }
-
-    private fun addIsPartOfToEvents(
-        eventURI: String,
-        catalogURI: String,
-    ) {
-        // Note: isPartOf relationship tracking removed - using harvestSource instead
-        // This method kept for compatibility but does nothing
-    }
-
-    private fun CatalogAndEventModels.catalogHasChanges(
-        dbMeta: ResourceEntity?,
-        harvestedChecksum: String,
-    ): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            harvestedChecksum != dbMeta.checksum
-        }
-
-    private fun EventRDFModel.hasChanges(
-        dbMeta: ResourceEntity?,
-        harvestedChecksum: String,
-    ): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            harvestedChecksum != dbMeta.checksum
-        }
 
     private fun splitEventsFromRDF(
         harvested: Model,
@@ -540,42 +470,10 @@ class EventHarvester(
             .createResource(catalogURI)
             .addProperty(RDF.type, DCAT.Catalog)
             .addPublisherForGeneratedCatalog(organization?.uri)
-            .addLabelForGeneratedCatalog(organization)
+            .addLabelForGeneratedCatalog(organization, "Hendelseskatalog", "Event catalog")
             .addEventsForGeneratedCatalog(events)
 
         return catalogModel
-    }
-
-    private fun Resource.addPublisherForGeneratedCatalog(publisherURI: String?): Resource {
-        if (publisherURI != null) {
-            addProperty(
-                DCTerms.publisher,
-                ResourceFactory.createResource(publisherURI),
-            )
-        }
-        return this
-    }
-
-    private fun Resource.addLabelForGeneratedCatalog(organization: Organization?): Resource {
-        val nb: String? = organization?.prefLabel?.nb ?: organization?.name
-        if (!nb.isNullOrBlank()) {
-            val label = model.createLiteral("$nb - Hendelseskatalog", "nb")
-            addProperty(RDFS.label, label)
-        }
-
-        val nn: String? = organization?.prefLabel?.nn ?: organization?.name
-        if (!nn.isNullOrBlank()) {
-            val label = model.createLiteral("$nn - Hendelseskatalog", "nn")
-            addProperty(RDFS.label, label)
-        }
-
-        val en: String? = organization?.prefLabel?.en ?: organization?.name
-        if (!en.isNullOrBlank()) {
-            val label = model.createLiteral("$en - Event catalog", "en")
-            addProperty(RDFS.label, label)
-        }
-
-        return this
     }
 
     private fun Resource.addEventsForGeneratedCatalog(events: Set<String>): Resource {

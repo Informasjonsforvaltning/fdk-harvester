@@ -11,7 +11,6 @@ import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
 import no.fdk.harvester.rdf.createDataServiceCatalogRecordModel
-import no.fdk.harvester.rdf.createIdFromString
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
@@ -70,15 +69,20 @@ class DataServiceHarvester(
             )
         }
         catalogPairs
-            .filter { forceUpdate || it.first.catalogHasChanges(it.second, computeChecksum(it.first.harvestedCatalog)) }
+            .filter { forceUpdate || checksumHasChanged(it.second, computeChecksum(it.first.harvestedCatalog)) }
             .forEach {
                 val dbMeta = it.second
                 val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
                 val catalogMeta =
-                    if (dbMeta == null || it.first.catalogHasChanges(dbMeta, catalogChecksum)) {
-                        it.first
-                            .mapToResource(harvestDate, dbMeta, catalogChecksum, harvestSource)
-                            .also { updatedMeta -> resourceRepository.save(updatedMeta) }
+                    if (dbMeta == null || checksumHasChanged(dbMeta, catalogChecksum)) {
+                        createResourceEntity(
+                            it.first.resourceURI,
+                            ResourceType.CATALOG,
+                            catalogChecksum,
+                            harvestDate,
+                            harvestSource,
+                            dbMeta,
+                        ).also { updatedMeta -> resourceRepository.save(updatedMeta) }
                     } else {
                         if (forceUpdate) {
                             dbMeta
@@ -182,8 +186,9 @@ class DataServiceHarvester(
         val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
         val harvestedChecksum = computeChecksum(harvestedService)
         return when {
-            dbMeta == null || dbMeta.removed || serviceHasChanges(dbMeta, harvestedChecksum) -> {
-                val updatedMeta = mapToResource(harvestDate, dbMeta, harvestedChecksum, harvestSource)
+            dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
+                val updatedMeta =
+                    createResourceEntity(resourceURI, ResourceType.DATASERVICE, harvestedChecksum, harvestDate, harvestSource, dbMeta)
                 resourceRepository.save(updatedMeta)
                 updatedMeta
             }
@@ -203,69 +208,6 @@ class DataServiceHarvester(
             }
         }
     }
-
-    private fun CatalogAndDataServiceModels.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val catalogURI = resourceURI
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(catalogURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = catalogURI,
-            type = ResourceType.CATALOG,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
-    private fun DataServiceModel.mapToResource(
-        harvestDate: Calendar,
-        dbMeta: ResourceEntity?,
-        checksum: String,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity {
-        val fdkId = dbMeta?.fdkId ?: createIdFromString(resourceURI)
-        val issued = dbMeta?.issued ?: harvestDate.toInstant()
-
-        return ResourceEntity(
-            uri = resourceURI,
-            type = ResourceType.DATASERVICE,
-            fdkId = fdkId,
-            removed = false,
-            issued = issued,
-            modified = harvestDate.toInstant(),
-            checksum = checksum,
-            harvestSource = harvestSource,
-        )
-    }
-
-    private fun CatalogAndDataServiceModels.catalogHasChanges(
-        dbMeta: ResourceEntity?,
-        harvestedChecksum: String,
-    ): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            harvestedChecksum != dbMeta.checksum
-        }
-
-    private fun DataServiceModel.serviceHasChanges(
-        dbMeta: ResourceEntity?,
-        harvestedChecksum: String,
-    ): Boolean =
-        if (dbMeta == null) {
-            true
-        } else {
-            harvestedChecksum != dbMeta.checksum
-        }
 
     private fun splitCatalogsFromRDF(
         harvested: Model,
