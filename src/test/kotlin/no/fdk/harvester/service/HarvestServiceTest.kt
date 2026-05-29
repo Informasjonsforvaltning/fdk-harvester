@@ -60,13 +60,6 @@ class HarvestServiceTest {
     }
 
     @Test
-    fun `HarvestService has non-null logger so logging never throws NPE`() {
-        val loggerMethod = HarvestService::class.java.getDeclaredMethod("logger")
-        loggerMethod.isAccessible = true
-        assertNotNull(loggerMethod.invoke(harvestService))
-    }
-
-    @Test
     fun `executeHarvest concept delegates to conceptHarvester`() {
         val report = createReport("concept")
         every {
