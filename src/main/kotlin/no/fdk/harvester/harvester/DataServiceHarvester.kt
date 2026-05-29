@@ -10,7 +10,7 @@ import no.fdk.harvester.model.ResourceEntity
 import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
-import no.fdk.harvester.rdf.createDataServiceCatalogRecordModel
+import no.fdk.harvester.rdf.createCatalogRecordModel
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
@@ -109,13 +109,13 @@ class DataServiceHarvester(
                         result?.let { serviceMeta ->
                             updatedServices.add(FdkIdAndUri(fdkId = serviceMeta.fdkId, uri = serviceMeta.uri))
                             val catalogRecordModel =
-                                createDataServiceCatalogRecordModel(
-                                    dataserviceUri = serviceMeta.uri,
-                                    dataserviceFdkId = serviceMeta.fdkId,
-                                    catalogFdkUri = catalogFdkUri,
+                                createCatalogRecordModel(
+                                    resourceUri = serviceMeta.uri,
+                                    fdkId = serviceMeta.fdkId,
+                                    parentFdkUri = catalogFdkUri,
                                     issued = serviceMeta.issued,
                                     modified = serviceMeta.modified,
-                                    dataserviceUriBase = applicationProperties.dataserviceUri,
+                                    fdkUriBase = applicationProperties.dataserviceUri,
                                 )
                             val graphWithRecords = service.harvestedService.union(catalogRecordModel)
                             val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)

@@ -122,231 +122,42 @@ fun Model.addMetaPrefixes(): Model {
 fun calendarFromInstant(instant: Instant): Calendar = Calendar.getInstance().apply { timeInMillis = instant.toEpochMilli() }
 
 /**
- * Builds an RDF model containing a single FDK [dcat:CatalogRecord] for a dataset.
- * Used to add catalog record triples to harvested dataset graphs (like the legacy dataset harvester).
+ * Builds an RDF model containing a single FDK [dcat:CatalogRecord].
  *
- * @param datasetUri The original dataset resource URI (foaf:primaryTopic).
- * @param datasetFdkId FDK identifier for the dataset.
- * @param catalogFdkUri Full FDK catalog URI (catalogUri + "/" + catalogFdkId), used for dct:isPartOf.
+ * @param resourceUri Original resource URI (foaf:primaryTopic).
+ * @param fdkId FDK identifier for the resource.
+ * @param parentFdkUri Parent catalog or collection FDK URI for dct:isPartOf; null omits the triple.
  * @param issued Issued timestamp for the record.
  * @param modified Modified timestamp for the record.
- * @param datasetUriBase Base URL for FDK dataset URIs (e.g. https://datasets.fellesdatakatalog.digdir.no/datasets).
+ * @param fdkUriBase Base URL for FDK resource URIs (record URI is `fdkUriBase/fdkId`).
+ * @param missingParentLogMessage When [parentFdkUri] is null, logged at error level if non-null.
  */
-fun createDatasetCatalogRecordModel(
-    datasetUri: String,
-    datasetFdkId: String,
-    catalogFdkUri: String,
+fun createCatalogRecordModel(
+    resourceUri: String,
+    fdkId: String,
+    parentFdkUri: String?,
     issued: Instant,
     modified: Instant,
-    datasetUriBase: String,
+    fdkUriBase: String,
+    missingParentLogMessage: String? = null,
 ): Model {
     val metaModel = ModelFactory.createDefaultModel()
     metaModel.addMetaPrefixes()
-    val fdkRecordUri = "$datasetUriBase/$datasetFdkId"
-    metaModel
-        .createResource(fdkRecordUri)
-        .addProperty(RDF.type, DCAT.CatalogRecord)
-        .addProperty(DCTerms.identifier, metaModel.createLiteral(datasetFdkId))
-        .addProperty(FOAF.primaryTopic, metaModel.createResource(datasetUri))
-        .addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
-        .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
-        .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
-    return metaModel
-}
+    val fdkRecordUri = "$fdkUriBase/$fdkId"
+    val metaResource =
+        metaModel
+            .createResource(fdkRecordUri)
+            .addProperty(RDF.type, DCAT.CatalogRecord)
+            .addProperty(DCTerms.identifier, metaModel.createLiteral(fdkId))
+            .addProperty(FOAF.primaryTopic, metaModel.createResource(resourceUri))
+            .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
+            .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
 
-/**
- * Builds an RDF model containing a single FDK [dcat:CatalogRecord] for a data service.
- * Used to add catalog record triples to harvested dataservice graphs (like the dataset harvester).
- *
- * @param dataserviceUri The original dataservice resource URI (foaf:primaryTopic).
- * @param dataserviceFdkId FDK identifier for the dataservice.
- * @param catalogFdkUri Full FDK catalog URI (catalogUri + "/" + catalogFdkId), used for dct:isPartOf.
- * @param issued Issued timestamp for the record.
- * @param modified Modified timestamp for the record.
- * @param dataserviceUriBase Base URL for FDK dataservice URIs (e.g. https://dataservices.fellesdatakatalog.digdir.no/dataservices).
- */
-fun createDataServiceCatalogRecordModel(
-    dataserviceUri: String,
-    dataserviceFdkId: String,
-    catalogFdkUri: String,
-    issued: Instant,
-    modified: Instant,
-    dataserviceUriBase: String,
-): Model {
-    val metaModel = ModelFactory.createDefaultModel()
-    metaModel.addMetaPrefixes()
-    val fdkRecordUri = "$dataserviceUriBase/$dataserviceFdkId"
-    metaModel
-        .createResource(fdkRecordUri)
-        .addProperty(RDF.type, DCAT.CatalogRecord)
-        .addProperty(DCTerms.identifier, metaModel.createLiteral(dataserviceFdkId))
-        .addProperty(FOAF.primaryTopic, metaModel.createResource(dataserviceUri))
-        .addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
-        .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
-        .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
-    return metaModel
-}
-
-/**
- * Builds an RDF model containing a single FDK [dcat:CatalogRecord] for an information model.
- * Used to add catalog record triples to harvested information model graphs.
- *
- * @param informationModelUri The original information model resource URI (foaf:primaryTopic).
- * @param informationModelFdkId FDK identifier for the information model.
- * @param catalogFdkUri Full FDK catalog URI (catalogUri + "/" + catalogFdkId), used for dct:isPartOf.
- * @param issued Issued timestamp for the record.
- * @param modified Modified timestamp for the record.
- * @param informationModelUriBase Base URL for FDK information model URIs (e.g. https://informationmodels.fellesdatakatalog.digdir.no/informationmodels).
- */
-fun createInformationModelCatalogRecordModel(
-    informationModelUri: String,
-    informationModelFdkId: String,
-    catalogFdkUri: String,
-    issued: Instant,
-    modified: Instant,
-    informationModelUriBase: String,
-): Model {
-    val metaModel = ModelFactory.createDefaultModel()
-    metaModel.addMetaPrefixes()
-    val fdkRecordUri = "$informationModelUriBase/$informationModelFdkId"
-    metaModel
-        .createResource(fdkRecordUri)
-        .addProperty(RDF.type, DCAT.CatalogRecord)
-        .addProperty(DCTerms.identifier, metaModel.createLiteral(informationModelFdkId))
-        .addProperty(FOAF.primaryTopic, metaModel.createResource(informationModelUri))
-        .addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
-        .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
-        .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
-    return metaModel
-}
-
-/**
- * Builds an RDF model containing a single FDK [dcat:CatalogRecord] for an event.
- * Used to add catalog record triples to harvested event graphs.
- */
-fun createEventCatalogRecordModel(
-    eventUri: String,
-    eventFdkId: String,
-    catalogFdkUri: String?,
-    issued: Instant,
-    modified: Instant,
-    eventUriBase: String,
-): Model {
-    val metaModel = ModelFactory.createDefaultModel()
-    metaModel.addMetaPrefixes()
-    val fdkRecordUri = "$eventUriBase/$eventFdkId"
-    val metaResource = metaModel.createResource(fdkRecordUri)
-
-    metaResource
-        .addProperty(RDF.type, DCAT.CatalogRecord)
-        .addProperty(DCTerms.identifier, metaModel.createLiteral(eventFdkId))
-        .addProperty(FOAF.primaryTopic, metaModel.createResource(eventUri))
-        .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
-        .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
-
-    if (catalogFdkUri == null) {
-        logger.error("The event $eventUri is missing associated catalog uri")
-    } else {
-        metaResource.addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
+    when (parentFdkUri) {
+        null -> missingParentLogMessage?.let { logger.error(it) }
+        else -> metaResource.addProperty(DCTerms.isPartOf, metaModel.createResource(parentFdkUri))
     }
 
-    return metaModel
-}
-
-/**
- * Builds an RDF model containing a single FDK [dcat:CatalogRecord] for a service.
- * Used to add catalog record triples to harvested service graphs.
- */
-fun createServiceCatalogRecordModel(
-    serviceUri: String,
-    serviceFdkId: String,
-    catalogFdkUri: String?,
-    issued: Instant,
-    modified: Instant,
-    serviceUriBase: String,
-): Model {
-    val metaModel = ModelFactory.createDefaultModel()
-    metaModel.addMetaPrefixes()
-    val fdkRecordUri = "$serviceUriBase/$serviceFdkId"
-    val metaResource = metaModel.createResource(fdkRecordUri)
-
-    metaResource
-        .addProperty(RDF.type, DCAT.CatalogRecord)
-        .addProperty(DCTerms.identifier, metaModel.createLiteral(serviceFdkId))
-        .addProperty(FOAF.primaryTopic, metaModel.createResource(serviceUri))
-        .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
-        .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
-
-    if (catalogFdkUri == null) {
-        logger.error("The service $serviceUri is missing associated catalog uri")
-    } else {
-        metaResource.addProperty(DCTerms.isPartOf, metaModel.createResource(catalogFdkUri))
-    }
-
-    return metaModel
-}
-
-/**
- * Builds an RDF model containing a single FDK [dcat:CatalogRecord] for a concept.
- * Concepts use collections (not catalogs); the record's dct:isPartOf points to the collection FDK URI.
- * Used to add catalog record triples to harvested concept graphs.
- */
-fun createConceptCatalogRecordModel(
-    conceptUri: String,
-    conceptFdkId: String,
-    collectionFdkUri: String?,
-    issued: Instant,
-    modified: Instant,
-    conceptUriBase: String,
-): Model {
-    val metaModel = ModelFactory.createDefaultModel()
-    metaModel.addMetaPrefixes()
-    val fdkRecordUri = "$conceptUriBase/$conceptFdkId"
-    val metaResource = metaModel.createResource(fdkRecordUri)
-
-    metaResource
-        .addProperty(RDF.type, DCAT.CatalogRecord)
-        .addProperty(DCTerms.identifier, metaModel.createLiteral(conceptFdkId))
-        .addProperty(FOAF.primaryTopic, metaModel.createResource(conceptUri))
-        .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
-        .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
-
-    if (collectionFdkUri == null) {
-        logger.error("The concept $conceptUri is missing associated collection uri")
-    } else {
-        metaResource.addProperty(DCTerms.isPartOf, metaModel.createResource(collectionFdkUri))
-    }
-
-    return metaModel
-}
-
-/**
- * Builds an RDF model containing a single FDK [dcat:CatalogRecord] for a catalog.
- * Used when publishing catalog graphs with records (e.g. for API or events).
- *
- * @param catalogUri The original catalog resource URI (foaf:primaryTopic).
- * @param catalogFdkId FDK identifier for the catalog.
- * @param issued Issued timestamp for the record.
- * @param modified Modified timestamp for the record.
- * @param catalogUriBase Base URL for FDK catalog URIs (e.g. https://datasets.fellesdatakatalog.digdir.no/catalogs).
- */
-fun createCatalogCatalogRecordModel(
-    catalogUri: String,
-    catalogFdkId: String,
-    issued: Instant,
-    modified: Instant,
-    catalogUriBase: String,
-): Model {
-    val metaModel = ModelFactory.createDefaultModel()
-    metaModel.addMetaPrefixes()
-    val fdkRecordUri = "$catalogUriBase/$catalogFdkId"
-    metaModel
-        .createResource(fdkRecordUri)
-        .addProperty(RDF.type, DCAT.CatalogRecord)
-        .addProperty(DCTerms.identifier, metaModel.createLiteral(catalogFdkId))
-        .addProperty(FOAF.primaryTopic, metaModel.createResource(catalogUri))
-        .addProperty(DCTerms.issued, metaModel.createTypedLiteral(calendarFromInstant(issued)))
-        .addProperty(DCTerms.modified, metaModel.createTypedLiteral(calendarFromInstant(modified)))
     return metaModel
 }
 
