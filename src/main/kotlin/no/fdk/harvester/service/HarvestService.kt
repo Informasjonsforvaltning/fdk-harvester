@@ -39,8 +39,6 @@ open class HarvestService(
     private val resourceRepository: ResourceRepository,
     private val harvestSourceRepository: HarvestSourceRepository,
 ) : HarvestServiceApi {
-    private fun logger(): Logger = LOGGER
-
     /**
      * Executes a harvest for the given parameters.
      * If the harvest source is not yet initialized (first run for this URL), the harvest is forced
@@ -60,9 +58,9 @@ open class HarvestService(
         val forceBecauseNotInitialized = existingSource == null || !existingSource.initialized
         val effectiveForced = forced || forceBecauseNotInitialized
         if (forceBecauseNotInitialized) {
-            logger().info("Harvest source not initialized for $dataSourceUrl, running forced harvest")
+            logger.info("Harvest source not initialized for $dataSourceUrl, running forced harvest")
         }
-        logger().debug("Initiating harvest for dataSourceId: $dataSourceId, dataType: $dataType, runId: $runId, forced: $effectiveForced")
+        logger.debug("Initiating harvest for dataSourceId: $dataSourceId, dataType: $dataType, runId: $runId, forced: $effectiveForced")
 
         return try {
             val dataSource =
@@ -132,16 +130,16 @@ open class HarvestService(
                     }
                 }
 
-            logger().debug("Completed harvest for dataSourceId: $dataSourceId, dataType: $dataType")
+            logger.debug("Completed harvest for dataSourceId: $dataSourceId, dataType: $dataType")
             if (report != null && forceBecauseNotInitialized) {
                 harvestSourceRepository.findByUri(dataSourceUrl)?.let { source ->
                     harvestSourceRepository.save(source.copy(initialized = true))
-                    logger().debug("Marked harvest source as initialized for $dataSourceUrl")
+                    logger.debug("Marked harvest source as initialized for $dataSourceUrl")
                 }
             }
             report
         } catch (ex: Exception) {
-            logger().error("Harvest failure for dataSourceId: $dataSourceId", ex)
+            logger.error("Harvest failure for dataSourceId: $dataSourceId", ex)
             throw ex
         }
     }
@@ -162,7 +160,7 @@ open class HarvestService(
         dataSourceId: String,
         runId: String,
     ): HarvestReport {
-        logger().debug("Marking resources as deleted for sourceUrl: $sourceUrl, dataType: $dataType")
+        logger.debug("Marking resources as deleted for sourceUrl: $sourceUrl, dataType: $dataType")
 
         val harvestSource =
             harvestSourceRepository.findByUri(sourceUrl)
@@ -184,34 +182,15 @@ open class HarvestService(
 
         val removedResources =
             if (resourcesToUpdate.isEmpty()) {
-                logger().debug("No resources to mark as deleted for sourceUrl: $sourceUrl")
+                logger.debug("No resources to mark as deleted for sourceUrl: $sourceUrl")
                 emptyList()
             } else {
                 val now = Instant.now()
-                val updatedResources =
-                    resourcesToUpdate.map { resource ->
-                        // Since ResourceEntity uses val properties, we need to create a new instance
-                        // JPA will handle the update based on the @Id (uri)
-                        val updated =
-                            ResourceEntity(
-                                uri = resource.uri,
-                                type = resource.type,
-                                fdkId = resource.fdkId,
-                                removed = true,
-                                issued = resource.issued,
-                                modified = now,
-                                checksum = resource.checksum,
-                                harvestSource = resource.harvestSource,
-                            )
-                        resourceRepository.save(updated)
-                        updated
-                    }
-
-                logger().debug("Marked ${updatedResources.size} resources as deleted for sourceUrl: $sourceUrl")
+                val updatedResources = resourcesToUpdate.map { markRemoved(it, now) }
+                logger.debug("Marked ${updatedResources.size} resources as deleted for sourceUrl: $sourceUrl")
                 updatedResources.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) }
             }
 
-        // Create a report for the deletion operation
         return HarvestReportBuilder.createSuccessReport(
             dataType = dataType.name.lowercase(),
             sourceId = dataSourceId,
@@ -232,36 +211,17 @@ open class HarvestService(
         runId: String,
         dataSourceId: String,
     ): HarvestReport {
-        logger().debug("Marking resource as deleted for fdkId: $fdkId")
+        logger.debug("Marking resource as deleted for fdkId: $fdkId")
 
         val harvestDate = Calendar.getInstance()
         val resourcesToUpdate = resourceRepository.findAllByFdkId(fdkId)
 
         if (resourcesToUpdate.isNotEmpty()) {
             val now = Instant.now()
-            val updatedResources =
-                resourcesToUpdate.map { resource ->
-                    // Since ResourceEntity uses val properties, we need to create a new instance
-                    // JPA will handle the update based on the @Id (uri)
-                    val updated =
-                        ResourceEntity(
-                            uri = resource.uri,
-                            type = resource.type,
-                            fdkId = resource.fdkId,
-                            removed = true,
-                            issued = resource.issued,
-                            modified = now,
-                            checksum = resource.checksum,
-                            harvestSource = resource.harvestSource,
-                        )
-                    resourceRepository.save(updated)
-                    updated
-                }
-
-            logger().debug("Marked ${updatedResources.size} resources as deleted for fdkId: $fdkId")
+            val updatedResources = resourcesToUpdate.map { markRemoved(it, now) }
+            logger.debug("Marked ${updatedResources.size} resources as deleted for fdkId: $fdkId")
         }
 
-        // Create a report for the remove operation
         return HarvestReportBuilder.createSuccessReport(
             dataType = dataType.name.lowercase(),
             sourceId = dataSourceId,
@@ -273,6 +233,23 @@ open class HarvestService(
             runId = runId,
         )
     }
+
+    private fun markRemoved(
+        resource: ResourceEntity,
+        modified: Instant,
+    ): ResourceEntity =
+        resourceRepository.save(
+            ResourceEntity(
+                uri = resource.uri,
+                type = resource.type,
+                fdkId = resource.fdkId,
+                removed = true,
+                issued = resource.issued,
+                modified = modified,
+                checksum = resource.checksum,
+                harvestSource = resource.harvestSource,
+            ),
+        )
 
     /**
      * Checks if a ResourceType matches the given DataType.
@@ -292,6 +269,6 @@ open class HarvestService(
         }
 
     companion object {
-        private val LOGGER: Logger = LoggerFactory.getLogger(HarvestService::class.java)
+        private val logger: Logger = LoggerFactory.getLogger(HarvestService::class.java)
     }
 }
