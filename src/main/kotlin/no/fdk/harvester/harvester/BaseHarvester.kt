@@ -6,14 +6,17 @@ import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestReport
 import no.fdk.harvester.model.HarvestSourceEntity
 import no.fdk.harvester.model.ResourceEntity
+import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.jenaTypeFromAcceptHeader
 import no.fdk.harvester.rdf.parseRDF
 import no.fdk.harvester.repository.HarvestSourceRepository
+import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
 import org.apache.jena.riot.Lang
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.springframework.data.repository.findByIdOrNull
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpStatus
 import java.io.ByteArrayOutputStream
@@ -33,6 +36,7 @@ private const val MAX_CONTENT_SIZE = 75 * 1024 * 1024 // 75MB
  */
 abstract class BaseHarvester(
     private val harvestSourceRepository: HarvestSourceRepository,
+    protected val resourceRepository: ResourceRepository,
 ) {
     // Getter-only to avoid relying on constructor/field initialization (Spring proxies may bypass it).
     protected val logger: Logger
@@ -246,6 +250,54 @@ abstract class BaseHarvester(
             )
         }
     }
+
+    /**
+     * Persists a resource when it is new, was removed, checksum changed, or [forceUpdate] is true.
+     * Returns null when the resource is unchanged and not forced.
+     */
+    protected fun upsertResource(
+        uri: String,
+        type: ResourceType,
+        harvestedChecksum: String,
+        harvestDate: Calendar,
+        forceUpdate: Boolean,
+        harvestSource: HarvestSourceEntity,
+        dbMeta: ResourceEntity? = null,
+    ): ResourceEntity? {
+        val existing = dbMeta ?: resourceRepository.findByIdOrNull(uri)
+        return when {
+            existing == null || existing.removed || checksumHasChanged(existing, harvestedChecksum) -> {
+                resourceRepository.save(
+                    createResourceEntity(uri, type, harvestedChecksum, harvestDate, harvestSource, existing),
+                )
+            }
+
+            forceUpdate -> {
+                resourceRepository.save(
+                    existing.copy(
+                        checksum = harvestedChecksum,
+                        harvestSource = harvestSource,
+                    ),
+                )
+            }
+
+            else -> {
+                null
+            }
+        }
+    }
+
+    /**
+     * Resources of [type] previously harvested from [harvestSource] that are not in [currentUris].
+     */
+    protected fun findRemovedResources(
+        type: ResourceType,
+        currentUris: Set<String>,
+        harvestSource: HarvestSourceEntity,
+    ): List<ResourceEntity> =
+        resourceRepository
+            .findAllByType(type)
+            .filter { it.harvestSource.id == harvestSource.id && !it.removed && !currentUris.contains(it.uri) }
 
     /**
      * Abstract method for type-specific database update logic.

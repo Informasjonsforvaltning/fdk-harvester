@@ -15,6 +15,7 @@ import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestReport
 import no.fdk.harvester.model.HarvestSourceEntity
 import no.fdk.harvester.repository.HarvestSourceRepository
+import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -29,7 +30,7 @@ class BaseHarvesterValidationTest {
     @Test
     fun `invalid source without id or url returns null`() {
         val repo = mockk<HarvestSourceRepository>()
-        val harvester = TestHarvester(repo)
+        val harvester = TestHarvester(repo, mockk(relaxed = true))
 
         val report =
             harvester.harvest(
@@ -43,7 +44,7 @@ class BaseHarvesterValidationTest {
     @Test
     fun `missing accept header returns null when required`() {
         val repo = mockk<HarvestSourceRepository>()
-        val harvester = TestHarvester(repo)
+        val harvester = TestHarvester(repo, mockk(relaxed = true))
 
         val report =
             harvester.harvest(
@@ -62,7 +63,7 @@ class BaseHarvesterValidationTest {
             server.stubFor(get(urlEqualTo("/rdf")).willReturn(aResponse().withStatus(200).withBody("x")))
 
             val repo = mockk<HarvestSourceRepository>()
-            val harvester = TestHarvester(repo)
+            val harvester = TestHarvester(repo, mockk(relaxed = true))
 
             val report =
                 harvester.harvest(
@@ -90,7 +91,7 @@ class BaseHarvesterValidationTest {
             server.stubFor(get(urlEqualTo("/rdf")).willReturn(aResponse().withStatus(200).withBody("x")))
 
             val repo = mockk<HarvestSourceRepository>()
-            val harvester = TestHarvester(repo)
+            val harvester = TestHarvester(repo, mockk(relaxed = true))
 
             val report =
                 harvester.harvest(
@@ -118,7 +119,7 @@ class BaseHarvesterValidationTest {
             server.stubFor(get(urlEqualTo("/rdf")).willReturn(aResponse().withStatus(500).withBody("nope")))
 
             val repo = mockk<HarvestSourceRepository>()
-            val harvester = TestHarvester(repo)
+            val harvester = TestHarvester(repo, mockk(relaxed = true))
 
             val report =
                 harvester.harvest(
@@ -163,7 +164,7 @@ class BaseHarvesterValidationTest {
             every { repo.findByUri(any()) } returns null
             every { repo.save(any()) } answers { firstArg<HarvestSourceEntity>().copy(id = 1L) }
 
-            val harvester = TestHarvester(repo)
+            val harvester = TestHarvester(repo, mockk(relaxed = true))
             val report =
                 harvester.harvest(
                     source =
@@ -207,7 +208,7 @@ class BaseHarvesterValidationTest {
             every { repo.findByUri(any()) } returns null
             every { repo.save(any()) } answers { firstArg<HarvestSourceEntity>().copy(id = 1L) }
 
-            val harvester = TestHarvester(repo)
+            val harvester = TestHarvester(repo, mockk(relaxed = true))
             val report =
                 harvester.harvest(
                     source =
@@ -244,7 +245,7 @@ class BaseHarvesterValidationTest {
             )
 
             val repo = mockk<HarvestSourceRepository>()
-            val harvester = TestHarvester(repo)
+            val harvester = TestHarvester(repo, mockk(relaxed = true))
             val report =
                 harvester.harvest(
                     source =
@@ -265,7 +266,8 @@ class BaseHarvesterValidationTest {
 
     private class TestHarvester(
         harvestSourceRepository: HarvestSourceRepository,
-    ) : BaseHarvester(harvestSourceRepository) {
+        resourceRepository: ResourceRepository,
+    ) : BaseHarvester(harvestSourceRepository, resourceRepository) {
         fun harvest(
             source: HarvestDataSource,
             harvestDate: Calendar,

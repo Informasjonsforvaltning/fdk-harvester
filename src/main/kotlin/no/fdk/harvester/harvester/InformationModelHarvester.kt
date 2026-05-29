@@ -32,10 +32,10 @@ import no.fdk.harvest.DataType as HarvestDataType
 @Service
 class InformationModelHarvester(
     private val applicationProperties: ApplicationProperties,
-    private val resourceRepository: ResourceRepository,
+    resourceRepository: ResourceRepository,
     harvestSourceRepository: HarvestSourceRepository,
     private val resourceEventProducer: ResourceEventProducer,
-) : BaseHarvester(harvestSourceRepository) {
+) : BaseHarvester(harvestSourceRepository, resourceRepository) {
     fun harvestInformationModelCatalog(
         source: HarvestDataSource,
         harvestDate: Calendar,
@@ -101,12 +101,18 @@ class InformationModelHarvester(
                     "${applicationProperties.informationmodelUri.substringBeforeLast("/")}/catalogs/${updatedCatalogMeta.fdkId}"
                 it.first.models.forEach { infoModel ->
                     try {
-                        validateSourceUrl(
-                            infoModel.resourceURI,
-                            harvestSource,
-                            resourceRepository.findByIdOrNull(infoModel.resourceURI),
-                        )
-                        val result = infoModel.upsertResource(harvestDate, forceUpdate, harvestSource)
+                        val dbMeta = resourceRepository.findByIdOrNull(infoModel.resourceURI)
+                        validateSourceUrl(infoModel.resourceURI, harvestSource, dbMeta)
+                        val result =
+                            upsertResource(
+                                uri = infoModel.resourceURI,
+                                type = ResourceType.INFORMATIONMODEL,
+                                harvestedChecksum = computeChecksum(infoModel.harvested),
+                                harvestDate = harvestDate,
+                                forceUpdate = forceUpdate,
+                                harvestSource = harvestSource,
+                                dbMeta = dbMeta,
+                            )
                         result?.let { modelMeta ->
                             updatedModels.add(modelMeta)
                             val catalogRecordModel =
@@ -132,14 +138,8 @@ class InformationModelHarvester(
                 }
             }
 
-        val modelsFromThisSource =
-            resourceRepository
-                .findAllByType(ResourceType.INFORMATIONMODEL)
-                .filter { it.harvestSource.id == harvestSource.id && !it.removed }
         val currentModelUris = catalogPairs.flatMap { it.first.models.map { m -> m.resourceURI } }.toSet()
-        removedModels.addAll(
-            modelsFromThisSource.filter { !currentModelUris.contains(it.uri) },
-        )
+        removedModels.addAll(findRemovedResources(ResourceType.INFORMATIONMODEL, currentModelUris, harvestSource))
         removedModels.map { it.copy(removed = true) }.run { resourceRepository.saveAll(this) }
 
         logger.debug("Harvest of $sourceUrl completed")
@@ -173,37 +173,6 @@ class InformationModelHarvester(
         }
 
         return report
-    }
-
-    private fun InformationModelRDFModel.upsertResource(
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity? {
-        val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
-        val harvestedChecksum = computeChecksum(harvested)
-        return when {
-            dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
-                val updatedMeta =
-                    createResourceEntity(resourceURI, ResourceType.INFORMATIONMODEL, harvestedChecksum, harvestDate, harvestSource, dbMeta)
-                resourceRepository.save(updatedMeta)
-                updatedMeta
-            }
-
-            forceUpdate -> {
-                val updatedMeta =
-                    dbMeta.copy(
-                        checksum = harvestedChecksum,
-                        harvestSource = harvestSource,
-                    )
-                resourceRepository.save(updatedMeta)
-                updatedMeta
-            }
-
-            else -> {
-                null
-            }
-        }
     }
 
     private fun extractCatalogs(

@@ -41,10 +41,10 @@ import no.fdk.harvest.DataType as HarvestDataType
 class ServiceHarvester(
     private val applicationProperties: ApplicationProperties,
     private val orgAdapter: DefaultOrganizationsAdapter,
-    private val resourceRepository: ResourceRepository,
+    resourceRepository: ResourceRepository,
     harvestSourceRepository: HarvestSourceRepository,
     private val resourceEventProducer: ResourceEventProducer,
-) : BaseHarvester(harvestSourceRepository) {
+) : BaseHarvester(harvestSourceRepository, resourceRepository) {
     fun harvestServices(
         source: HarvestDataSource,
         harvestDate: Calendar,
@@ -90,8 +90,9 @@ class ServiceHarvester(
             )
 
         val removedServices =
-            getServicesRemovedThisHarvest(
-                allServices.map { it.resourceURI },
+            findRemovedResources(
+                ResourceType.SERVICE,
+                allServices.map { it.resourceURI }.toSet(),
                 harvestSource,
             )
         removedServices
@@ -194,11 +195,20 @@ class ServiceHarvester(
     ): Pair<List<FdkIdAndUri>, Map<String, String>> {
         val resourceGraphs = mutableMapOf<String, String>()
         val updatedServices =
-            services.mapNotNull {
-                it
-                    .upsertResource(harvestDate, forceUpdate, harvestSource)
-                    ?.let { meta ->
-                        val catalogFdkUri = serviceUriToCatalogFdkUri[it.resourceURI]
+            services.mapNotNull { service ->
+                try {
+                    val dbMeta = resourceRepository.findByIdOrNull(service.resourceURI)
+                    validateSourceUrl(service.resourceURI, harvestSource, dbMeta)
+                    upsertResource(
+                        uri = service.resourceURI,
+                        type = ResourceType.SERVICE,
+                        harvestedChecksum = computeChecksum(service.harvested),
+                        harvestDate = harvestDate,
+                        forceUpdate = forceUpdate,
+                        harvestSource = harvestSource,
+                        dbMeta = dbMeta,
+                    )?.let { meta ->
+                        val catalogFdkUri = serviceUriToCatalogFdkUri[service.resourceURI]
 
                         val catalogRecordModel =
                             createCatalogRecordModel(
@@ -215,59 +225,18 @@ class ServiceHarvester(
                                         null
                                     },
                             )
-                        val graphWithRecords = it.harvested.union(catalogRecordModel)
+                        val graphWithRecords = service.harvested.union(catalogRecordModel)
                         val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                         resourceGraphs[meta.fdkId] = graphString
-                        FdkIdAndUri(fdkId = meta.fdkId, uri = it.resourceURI)
+                        FdkIdAndUri(fdkId = meta.fdkId, uri = service.resourceURI)
                     }
-            }
-        return Pair(updatedServices, resourceGraphs)
-    }
-
-    private fun ServiceRDFModel.upsertResource(
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity? {
-        try {
-            val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
-            validateSourceUrl(resourceURI, harvestSource, dbMeta)
-            val harvestedChecksum = computeChecksum(harvested)
-            return when {
-                dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
-                    val updatedMeta =
-                        createResourceEntity(resourceURI, ResourceType.SERVICE, harvestedChecksum, harvestDate, harvestSource, dbMeta)
-                    resourceRepository.save(updatedMeta)
-                    updatedMeta
-                }
-
-                forceUpdate -> {
-                    val updatedMeta =
-                        dbMeta.copy(
-                            checksum = harvestedChecksum,
-                            harvestSource = harvestSource,
-                        )
-                    resourceRepository.save(updatedMeta)
-                    updatedMeta
-                }
-
-                else -> {
+                } catch (conflictError: HarvestSourceConflictException) {
+                    logger.warn("Service skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
                     null
                 }
             }
-        } catch (conflictError: HarvestSourceConflictException) {
-            logger.warn("Service skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
-            return null
-        }
+        return Pair(updatedServices, resourceGraphs)
     }
-
-    private fun getServicesRemovedThisHarvest(
-        services: List<String>,
-        harvestSource: HarvestSourceEntity,
-    ): List<ResourceEntity> =
-        resourceRepository
-            .findAllByType(ResourceType.SERVICE)
-            .filter { it.harvestSource.id == harvestSource.id && !it.removed && !services.contains(it.uri) }
 
     private fun extractCatalogs(
         harvested: Model,
