@@ -56,7 +56,7 @@ class HarvesterHappyPathTest {
                 ApplicationProperties(
                     datasetUri = "https://datasets.fellesdatakatalog.digdir.no/datasets",
                 )
-            val harvester = DatasetHarvester(appProps, resourceRepository, harvestSourceRepository, producer)
+            val harvester = DatasetHarvester(appProps, mockk(relaxed = true), resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestDatasetCatalog(
                     source =
@@ -127,7 +127,7 @@ class HarvesterHappyPathTest {
                 ApplicationProperties(
                     datasetUri = "https://datasets.fellesdatakatalog.digdir.no/datasets",
                 )
-            val harvester = DatasetHarvester(appProps, resourceRepository, harvestSourceRepository, producer)
+            val harvester = DatasetHarvester(appProps, mockk(relaxed = true), resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestDatasetCatalog(
                     source =
@@ -172,7 +172,7 @@ class HarvesterHappyPathTest {
                 ApplicationProperties(
                     dataserviceUri = "https://dataservices.fellesdatakatalog.digdir.no/dataservices",
                 )
-            val harvester = DataServiceHarvester(appProps, resourceRepository, producer, harvestSourceRepository)
+            val harvester = DataServiceHarvester(appProps, mockk(relaxed = true), resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestDataServiceCatalog(
                     source =
@@ -215,7 +215,8 @@ class HarvesterHappyPathTest {
                 ApplicationProperties(
                     informationmodelUri = "https://informationmodels.fellesdatakatalog.digdir.no/informationmodels",
                 )
-            val harvester = InformationModelHarvester(appProps, resourceRepository, harvestSourceRepository, producer)
+            val harvester =
+                InformationModelHarvester(appProps, mockk(relaxed = true), resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestInformationModelCatalog(
                     source =
@@ -257,13 +258,15 @@ class HarvesterHappyPathTest {
         try {
             val resourceRepository = mockResourceRepository()
             val harvestSourceRepository = mockHarvestSourceRepository()
+            val resourceGraphsSlot = slot<Map<String, String>>()
             val producer = mockk<ResourceEventProducer>(relaxed = true)
 
             val appProps =
                 ApplicationProperties(
                     informationmodelUri = "https://informationmodels.fellesdatakatalog.digdir.no/informationmodels",
                 )
-            val harvester = InformationModelHarvester(appProps, resourceRepository, harvestSourceRepository, producer)
+            val harvester =
+                InformationModelHarvester(appProps, mockk(relaxed = true), resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestInformationModelCatalog(
                     source =
@@ -280,6 +283,24 @@ class HarvesterHappyPathTest {
             assertNotNull(report)
             assertFalse(report!!.harvestError)
             verify(atLeast = 1) { resourceRepository.save(any<ResourceEntity>()) }
+            verify(atLeast = 1) {
+                producer.publishHarvestedEvents(
+                    dataType = DataType.informationmodel,
+                    resources = any(),
+                    resourceGraphs = capture(resourceGraphsSlot),
+                    runId = any(),
+                )
+            }
+
+            val infoModelGraph = resourceGraphsSlot.captured.values.first()
+            assertTrue(
+                infoModelGraph.contains("CodeList"),
+                "produced graph should inline the referenced (blank node) code list",
+            )
+            assertTrue(
+                infoModelGraph.contains("CodeElement") && infoModelGraph.contains("inScheme"),
+                "produced graph should inline the code element associated with the code list via skos:inScheme",
+            )
         } finally {
             server.stop()
         }
@@ -306,7 +327,7 @@ class HarvesterHappyPathTest {
                 ApplicationProperties(
                     conceptUri = "https://concepts.fellesdatakatalog.digdir.no/concepts",
                 )
-            val harvester = ConceptHarvester(orgAdapter, resourceRepository, producer, appProps, harvestSourceRepository)
+            val harvester = ConceptHarvester(appProps, orgAdapter, resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestConceptCollection(
                     source =
@@ -357,7 +378,7 @@ class HarvesterHappyPathTest {
                 ApplicationProperties(
                     conceptUri = "https://concepts.fellesdatakatalog.digdir.no/concepts",
                 )
-            val harvester = ConceptHarvester(orgAdapter, resourceRepository, producer, appProps, harvestSourceRepository)
+            val harvester = ConceptHarvester(appProps, orgAdapter, resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestConceptCollection(
                     source =
@@ -422,6 +443,127 @@ class HarvesterHappyPathTest {
             assertNotNull(report)
             assertFalse(report!!.harvestError)
             verify(atLeast = 1) { resourceRepository.save(any<ResourceEntity>()) }
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
+    fun `service harvester - harvests public service with output and required evidence`() {
+        val serviceUri =
+            "https://service-catalog.api.staging.fellesdatakatalog.digdir.no/rdf/catalogs/910244132/" +
+                "public-services/9e576bc5-6a8f-44ae-bd04-ce74be200727"
+        val ttl =
+            """
+            PREFIX adms:   <http://www.w3.org/ns/adms#>
+            PREFIX cpsv:   <http://purl.org/vocab/cpsv#>
+            PREFIX cv:     <http://data.europa.eu/m8g/>
+            PREFIX dcat:   <http://www.w3.org/ns/dcat#>
+            PREFIX dcatno: <https://data.norge.no/vocabulary/dcatno#>
+            PREFIX dct:    <http://purl.org/dc/terms/>
+            PREFIX foaf:   <http://xmlns.com/foaf/0.1/>
+            PREFIX vcard:  <http://www.w3.org/2006/vcard/ns#>
+
+            <$serviceUri/output/0>
+                    a                cv:Output;
+                    dct:description  "Produserer-beskrivelse"@nb;
+                    dct:title        "Produserer-tittel"@nb .
+
+            <$serviceUri/evidence/1>
+                    a                <https://data.norge.no/vocabulary/cpsvno#RequiredEvidence>;
+                    dct:description  "beskrivelse"@nb;
+                    dct:identifier   <$serviceUri/evidence/1>;
+                    dct:language     <http://publications.europa.eu/resource/authority/language/NOB>;
+                    dct:title        "dokumentasjon 2"@nb .
+
+            <$serviceUri>
+                    a                         cpsv:PublicService;
+                    cv:hasCompetentAuthority  <https://data.brreg.no/enhetsregisteret/api/enheter/910244132>;
+                    dct:description           "Tilfeldig beskrivelse"@nb;
+                    dct:identifier            <$serviceUri>;
+                    dct:title                 "Eksempeltjeneste"@nb;
+                    cpsv:produces             <$serviceUri/output/0>;
+                    <https://data.norge.no/vocabulary/cpsvno#hasRequiredEvidence>
+                            <$serviceUri/evidence/0> , <$serviceUri/evidence/1> .
+
+            <$serviceUri/evidence/0>
+                    a                <https://data.norge.no/vocabulary/cpsvno#RequiredEvidence>;
+                    dct:description  "Beskrivelse av dokumentasjonskrav"@nb;
+                    dct:identifier   <$serviceUri/evidence/0>;
+                    dct:isPartOf     <https://registrering.staging.fellesdatakatalog.digdir.no/catalogs/974760673/datasets/f94bd890-accd-4177-86d7-bb63d35ebda3>;
+                    dct:language     <http://publications.europa.eu/resource/authority/language/NNO> , <http://publications.europa.eu/resource/authority/language/NOB> , <http://publications.europa.eu/resource/authority/language/ENG>;
+                    dct:title        "Navn på dokumentasjonskrav"@nb , "Name"@en;
+                    foaf:page        <https://dokumentasjon.no> .
+            """.trimIndent()
+
+        val server = wireMock(ttl)
+        try {
+            val orgAdapter = mockk<DefaultOrganizationsAdapter>(relaxed = true)
+            val resourceRepository = mockResourceRepository()
+            val harvestSourceRepository = mockHarvestSourceRepository()
+            val resourceGraphsSlot = slot<Map<String, String>>()
+            val producer = mockk<ResourceEventProducer>(relaxed = true)
+
+            val appProps =
+                ApplicationProperties(
+                    serviceUri = "https://services.fellesdatakatalog.digdir.no/services",
+                )
+            val harvester = ServiceHarvester(appProps, orgAdapter, resourceRepository, harvestSourceRepository, producer)
+            val report =
+                harvester.harvestServices(
+                    source =
+                        HarvestDataSource(
+                            id = "source-1",
+                            url = "http://localhost:${server.port()}/rdf",
+                            acceptHeaderValue = "text/turtle",
+                            publisherId = null,
+                        ),
+                    harvestDate = Calendar.getInstance(),
+                    forceUpdate = false,
+                    runId = "run-1",
+                )
+
+            assertNotNull(report)
+            assertFalse(report!!.harvestError)
+            assertEquals(1, report.changedResources.size, "the single public service should be harvested")
+            assertEquals(serviceUri, report.changedResources.first().uri)
+            verify(atLeast = 1) { resourceRepository.save(any<ResourceEntity>()) }
+            verify(atLeast = 1) {
+                producer.publishHarvestedEvents(
+                    dataType = DataType.service,
+                    resources = any(),
+                    resourceGraphs = capture(resourceGraphsSlot),
+                    runId = any(),
+                )
+            }
+
+            val serviceGraph = resourceGraphsSlot.captured.values.first()
+            assertTrue(
+                serviceGraph.contains("Eksempeltjeneste"),
+                "produced graph should contain the public service title",
+            )
+            assertTrue(
+                serviceGraph.contains("PublicService"),
+                "produced graph should type the resource as a public service",
+            )
+            assertTrue(
+                serviceGraph.contains("CatalogRecord") && serviceGraph.contains(serviceUri),
+                "produced graph should contain a catalog record with the service as primary topic",
+            )
+            assertTrue(
+                serviceGraph.contains("$serviceUri/output/0") && serviceGraph.contains("Produserer-tittel"),
+                "produced graph should inline the produced output with its title",
+            )
+            assertTrue(
+                serviceGraph.contains("$serviceUri/evidence/0") && serviceGraph.contains("$serviceUri/evidence/1"),
+                "produced graph should contain both required evidence references",
+            )
+            assertTrue(
+                serviceGraph.contains("Navn på dokumentasjonskrav") &&
+                    serviceGraph.contains("Name") &&
+                    serviceGraph.contains("dokumentasjon 2"),
+                "produced graph should inline the required evidence titles",
+            )
         } finally {
             server.stop()
         }
@@ -505,7 +647,7 @@ class HarvesterHappyPathTest {
                 ApplicationProperties(
                     eventUri = "https://events.fellesdatakatalog.digdir.no/events",
                 )
-            val harvester = EventHarvester(appProps, orgAdapter, resourceRepository, producer, harvestSourceRepository)
+            val harvester = EventHarvester(appProps, orgAdapter, resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestEvents(
                     source =
@@ -576,7 +718,7 @@ class HarvesterHappyPathTest {
             val producer = mockk<ResourceEventProducer>(relaxed = true)
 
             val appProps = ApplicationProperties(datasetUri = "https://datasets.fellesdatakatalog.digdir.no/datasets")
-            val harvester = DatasetHarvester(appProps, resourceRepository, harvestSourceRepository, producer)
+            val harvester = DatasetHarvester(appProps, mockk(relaxed = true), resourceRepository, harvestSourceRepository, producer)
             val report =
                 harvester.harvestDatasetCatalog(
                     source =

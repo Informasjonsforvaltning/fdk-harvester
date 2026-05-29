@@ -14,7 +14,7 @@ import java.time.Instant
 /** JPA entity for a harvested resource (URI, type, fdkId, removed flag, timestamps, harvest source). */
 @Entity
 @Table(name = "resources")
-data class ResourceEntity(
+class ResourceEntity(
     @Id
     @Column(name = "uri", length = 2048)
     val uri: String,
@@ -34,4 +34,15 @@ data class ResourceEntity(
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "harvest_source_id", nullable = false)
     val harvestSource: HarvestSourceEntity,
-)
+) {
+    fun copy(
+        uri: String = this.uri,
+        type: ResourceType = this.type,
+        fdkId: String = this.fdkId,
+        removed: Boolean = this.removed,
+        issued: Instant = this.issued,
+        modified: Instant = this.modified,
+        checksum: String = this.checksum,
+        harvestSource: HarvestSourceEntity = this.harvestSource,
+    ): ResourceEntity = ResourceEntity(uri, type, fdkId, removed, issued, modified, checksum, harvestSource)
+}

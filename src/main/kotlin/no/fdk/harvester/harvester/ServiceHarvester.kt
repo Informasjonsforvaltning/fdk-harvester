@@ -3,35 +3,22 @@ package no.fdk.harvester.harvester
 import no.fdk.harvester.adapter.DefaultOrganizationsAdapter
 import no.fdk.harvester.config.ApplicationProperties
 import no.fdk.harvester.kafka.ResourceEventProducer
-import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestReport
-import no.fdk.harvester.model.HarvestSourceEntity
 import no.fdk.harvester.model.Organization
-import no.fdk.harvester.model.ResourceEntity
-import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.CPSV
 import no.fdk.harvester.rdf.CPSVNO
 import no.fdk.harvester.rdf.CV
 import no.fdk.harvester.rdf.DCATNO
-import no.fdk.harvester.rdf.computeChecksum
-import no.fdk.harvester.rdf.containsTriple
-import no.fdk.harvester.rdf.createCatalogRecordModel
-import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
-import org.apache.jena.query.QueryExecutionFactory
-import org.apache.jena.query.QueryFactory
 import org.apache.jena.rdf.model.Model
-import org.apache.jena.rdf.model.ModelFactory
+import org.apache.jena.rdf.model.Property
 import org.apache.jena.rdf.model.RDFNode
 import org.apache.jena.rdf.model.Resource
-import org.apache.jena.rdf.model.Statement
-import org.apache.jena.riot.Lang
 import org.apache.jena.vocabulary.DCAT
 import org.apache.jena.vocabulary.DCTerms
 import org.apache.jena.vocabulary.RDF
-import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.util.Calendar
 import no.fdk.harvest.DataType as HarvestDataType
@@ -39,12 +26,18 @@ import no.fdk.harvest.DataType as HarvestDataType
 /** Harvests CPSV/DCAT service catalogs from RDF and publishes service events (with FDK catalog records in the graph). */
 @Service
 class ServiceHarvester(
-    private val applicationProperties: ApplicationProperties,
-    private val orgAdapter: DefaultOrganizationsAdapter,
+    applicationProperties: ApplicationProperties,
+    orgAdapter: DefaultOrganizationsAdapter,
     resourceRepository: ResourceRepository,
     harvestSourceRepository: HarvestSourceRepository,
-    private val resourceEventProducer: ResourceEventProducer,
-) : BaseHarvester(harvestSourceRepository, resourceRepository) {
+    resourceEventProducer: ResourceEventProducer,
+) : ResourceHarvester(
+        harvestSourceRepository,
+        resourceRepository,
+        applicationProperties,
+        orgAdapter,
+        resourceEventProducer,
+    ) {
     fun harvestServices(
         source: HarvestDataSource,
         harvestDate: Calendar,
@@ -52,318 +45,70 @@ class ServiceHarvester(
         runId: String,
     ): HarvestReport? = validateAndHarvest(source, harvestDate, forceUpdate, runId, "service", requiresAcceptHeader = true)
 
-    override fun updateDB(
-        harvested: Model,
-        source: HarvestDataSource,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        runId: String,
-        dataType: String,
-        harvestSource: HarvestSourceEntity,
-    ): HarvestReport {
-        val sourceId = source.id!!
-        val sourceUrl = source.url!!
-        val publisherId = source.publisherId
-        val allServices = splitServicesFromRDF(harvested, sourceUrl)
-        val organization =
-            if (publisherId != null && allServices.containsFreeServices()) {
-                orgAdapter.getOrganization(publisherId)
-            } else {
-                null
-            }
-
-        val catalogs = extractCatalogs(harvested, allServices, sourceUrl, organization)
-        val (updatedCatalogs, serviceUriToCatalogFdkUri) =
-            updateCatalogs(
-                catalogs,
-                harvestDate,
-                forceUpdate,
-                harvestSource,
-            )
-        val (updatedServices, resourceGraphs) =
-            updateServices(
-                allServices,
-                harvestDate,
-                forceUpdate,
-                harvestSource,
-                serviceUriToCatalogFdkUri,
-            )
-
-        val removedServices =
-            findRemovedResources(
-                ResourceType.SERVICE,
-                allServices.map { it.resourceURI }.toSet(),
-                harvestSource,
-            )
-        removedServices
-            .map { it.copy(removed = true) }
-            .run { resourceRepository.saveAll(this) }
-
-        val report =
-            HarvestReportBuilder.createSuccessReport(
-                dataType = dataType,
-                sourceId = sourceId,
-                sourceUrl = sourceUrl,
-                harvestDate = harvestDate,
-                changedCatalogs = updatedCatalogs,
-                changedResources = updatedServices,
-                removedResources = removedServices.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
-                runId = runId,
-            )
-
-        if (updatedServices.isNotEmpty()) {
-            resourceEventProducer.publishHarvestedEvents(
-                dataType = HarvestDataType.service,
-                resources = updatedServices,
-                resourceGraphs = resourceGraphs,
-                runId = runId,
-            )
-        }
-
-        if (removedServices.isNotEmpty()) {
-            resourceEventProducer.publishRemovedEvents(
-                dataType = HarvestDataType.service,
-                resources = removedServices.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
-                runId = runId,
-            )
-        }
-
-        return report
-    }
-
-    private fun updateCatalogs(
-        catalogs: List<ServiceCatalogRDFModel>,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        harvestSource: HarvestSourceEntity,
-    ): Pair<List<FdkIdAndUri>, Map<String, String>> {
-        val serviceUriToCatalogFdkUri = mutableMapOf<String, String>()
-        catalogs.forEach { catalog ->
-            validateSourceUrl(
-                catalog.resourceURI,
-                harvestSource,
-                resourceRepository.findByIdOrNull(catalog.resourceURI),
-            )
-        }
-        val updatedCatalogs =
-            catalogs
-                .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
-                .filter { forceUpdate || checksumHasChanged(it.second, computeChecksum(it.first.harvested)) }
-                .map {
-                    val dbMeta = it.second
-                    val catalogChecksum = computeChecksum(it.first.harvested)
-                    val updatedMeta =
-                        if (dbMeta == null || checksumHasChanged(dbMeta, catalogChecksum)) {
-                            createResourceEntity(
-                                it.first.resourceURI,
-                                ResourceType.CATALOG,
-                                catalogChecksum,
-                                harvestDate,
-                                harvestSource,
-                                dbMeta,
-                            ).also { resourceRepository.save(it) }
-                        } else {
-                            if (forceUpdate) {
-                                dbMeta
-                                    .copy(
-                                        checksum = catalogChecksum,
-                                        modified = harvestDate.toInstant(),
-                                        harvestSource = harvestSource,
-                                    ).also { resourceRepository.save(it) }
-                            } else {
-                                dbMeta
-                            }
-                        }
-
-                    val catalogFdkUri =
-                        "${applicationProperties.serviceUri.substringBeforeLast("/")}/catalogs/${updatedMeta.fdkId}"
-                    it.first.services.forEach { serviceURI: String ->
-                        serviceUriToCatalogFdkUri[serviceURI] = catalogFdkUri
-                    }
-
-                    FdkIdAndUri(fdkId = updatedMeta.fdkId, uri = updatedMeta.uri)
-                }
-        return Pair(updatedCatalogs, serviceUriToCatalogFdkUri)
-    }
-
-    private fun updateServices(
-        services: List<ServiceRDFModel>,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        harvestSource: HarvestSourceEntity,
-        serviceUriToCatalogFdkUri: Map<String, String>,
-    ): Pair<List<FdkIdAndUri>, Map<String, String>> {
-        val resourceGraphs = mutableMapOf<String, String>()
-        val updatedServices =
-            services.mapNotNull { service ->
-                try {
-                    val dbMeta = resourceRepository.findByIdOrNull(service.resourceURI)
-                    validateSourceUrl(service.resourceURI, harvestSource, dbMeta)
-                    upsertResource(
-                        uri = service.resourceURI,
-                        type = ResourceType.SERVICE,
-                        harvestedChecksum = computeChecksum(service.harvested),
-                        harvestDate = harvestDate,
-                        forceUpdate = forceUpdate,
-                        harvestSource = harvestSource,
-                        dbMeta = dbMeta,
-                    )?.let { meta ->
-                        val catalogFdkUri = serviceUriToCatalogFdkUri[service.resourceURI]
-
-                        val catalogRecordModel =
-                            createCatalogRecordModel(
-                                resourceUri = meta.uri,
-                                fdkId = meta.fdkId,
-                                parentFdkUri = catalogFdkUri,
-                                issued = meta.issued,
-                                modified = meta.modified,
-                                fdkUriBase = applicationProperties.serviceUri,
-                                missingParentLogMessage =
-                                    if (catalogFdkUri == null) {
-                                        "The service ${meta.uri} is missing associated catalog uri"
-                                    } else {
-                                        null
-                                    },
-                            )
-                        val graphWithRecords = service.harvested.union(catalogRecordModel)
-                        val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
-                        resourceGraphs[meta.fdkId] = graphString
-                        FdkIdAndUri(fdkId = meta.fdkId, uri = service.resourceURI)
-                    }
-                } catch (conflictError: HarvestSourceConflictException) {
-                    logger.warn("Service skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
-                    null
-                }
-            }
-        return Pair(updatedServices, resourceGraphs)
-    }
-
-    private fun extractCatalogs(
-        harvested: Model,
-        allServices: List<ServiceRDFModel>,
-        sourceURL: String,
-        organization: Organization?,
-    ): List<ServiceCatalogRDFModel> {
-        val harvestedCatalogs =
-            harvested
-                .listResourcesWithProperty(RDF.type, DCAT.Catalog)
-                .toList()
-                .excludeBlankNodes(sourceURL)
-                .map { resource ->
-                    val catalogServices: Set<String> =
-                        resource
-                            .listProperties(DCATNO.containsService)
-                            .toList()
-                            .filter { it.isResourceProperty() }
-                            .map { it.resource }
-                            .excludeBlankNodes(sourceURL)
-                            .map { it.uri }
-                            .toSet()
-
-                    val catalogModelWithoutServices =
-                        resource
-                            .extractCatalogModel()
-                            .recursiveBlankNodeSkolem(resource.uri)
-
-                    val catalogModel = ModelFactory.createDefaultModel()
-                    allServices
-                        .filter { catalogServices.contains(it.resourceURI) }
-                        .forEach { catalogModel.add(it.harvested) }
-
-                    ServiceCatalogRDFModel(
-                        resourceURI = resource.uri,
-                        harvestedWithoutServices = catalogModelWithoutServices,
-                        harvested = catalogModel.union(catalogModelWithoutServices),
-                        services = catalogServices,
-                    )
-                }
-
-        return harvestedCatalogs.plus(
-            generatedCatalog(
-                allServices.filterNot { it.isMemberOfAnyCatalog },
-                sourceURL,
-                organization,
-            ),
+    override val harvestConfig =
+        ResourceHarvestConfig(
+            harvestDataType = HarvestDataType.service,
+            resourceType = no.fdk.harvester.model.ResourceType.SERVICE,
+            containerResourceType = no.fdk.harvester.model.ResourceType.CATALOG,
+            fdkResourceUriBase = applicationProperties.serviceUri,
+            containerFdkUriBase = "${applicationProperties.serviceUri.substringBeforeLast("/")}/catalogs",
+            generatedCatalogNbLabel = "Tjenestekatalog",
+            generatedCatalogEnLabel = "Service catalog",
+            conflictSkipLabel = "Service",
+            missingParentLogMessage = { uri -> "The service $uri is missing associated catalog uri" },
         )
-    }
 
-    private fun splitServicesFromRDF(
+    override fun containerRdfType(): Resource = DCAT.Catalog
+
+    override fun listMembers(
         harvested: Model,
         sourceURL: String,
-    ): List<ServiceRDFModel> =
+    ): List<MemberRDFModel> =
         harvested
             .listResourcesWithServiceType()
-            .toList()
             .excludeBlankNodes(sourceURL)
-            .map { serviceResource -> serviceResource.extractService() }
+            .map { it.extractMember(DCATNO.containsService) }
 
-    private fun Resource.extractCatalogModel(): Model {
-        val catalogModelWithoutServices = ModelFactory.createDefaultModel()
-        catalogModelWithoutServices.setNsPrefixes(model.nsPrefixMap)
-
-        listProperties()
-            .toList()
-            .forEach { catalogModelWithoutServices.addCatalogProperties(it) }
-
-        return catalogModelWithoutServices
-    }
-
-    private fun Resource.extractService(): ServiceRDFModel {
-        val serviceModel = listProperties().toModel()
-        serviceModel.setNsPrefixes(model.nsPrefixMap)
-
-        listProperties()
-            .toList()
-            .filter { it.isResourceProperty() }
-            .forEach { serviceModel.recursiveAddNonServiceResources(it.resource) }
-
-        return ServiceRDFModel(
-            resourceURI = uri,
-            harvested = serviceModel.recursiveBlankNodeSkolem(uri),
-            isMemberOfAnyCatalog = isMemberOfAnyCatalog(),
-        )
-    }
-
-    private fun Model.addCatalogProperties(property: Statement): Model =
-        when {
-            property.predicate != DCATNO.containsService && property.isResourceProperty() -> {
-                add(property).recursiveAddNonServiceResources(property.resource)
-            }
-
-            property.predicate != DCATNO.containsService -> {
-                add(property)
-            }
-
-            property.isResourceProperty() && property.resource.isURIResource -> {
-                add(property)
-            }
-
-            else -> {
+    override fun extractContainers(
+        harvested: Model,
+        members: List<MemberRDFModel>,
+        sourceURL: String,
+        organization: Organization?,
+    ): List<ContainerRDFModel> =
+        extractContainersWithOrphans(
+            harvested = harvested,
+            members = members,
+            sourceURL = sourceURL,
+            organization = organization,
+            memberLinkProperty = DCATNO.containsService,
+            addMembersToGeneratedContainer = { memberUris ->
+                memberUris.forEach { addProperty(DCATNO.containsService, model.createResource(it)) }
                 this
-            }
+            },
+        )
+
+    override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean =
+        types.contains(CPSV.PublicService) ||
+            types.contains(CPSVNO.Service) ||
+            types.contains(CV.Event) ||
+            types.contains(CV.BusinessEvent) ||
+            types.contains(CV.LifeEvent)
+
+    override fun postProcessMemberModel(
+        model: Model,
+        resource: Resource,
+        types: List<RDFNode>,
+    ) {
+        if (types.contains(CV.Participation)) {
+            model.addAgentsAssociatedWithParticipation(resource)
         }
+    }
 
     private fun Model.listResourcesWithServiceType(): List<Resource> {
-        val publicServices =
-            listResourcesWithProperty(RDF.type, CPSV.PublicService)
-                .toList()
-
-        val cpsvnoServices =
-            listResourcesWithProperty(RDF.type, CPSVNO.Service)
-                .toList()
-
-        return listOf(publicServices, cpsvnoServices).flatten()
+        val publicServices = listResourcesWithProperty(RDF.type, CPSV.PublicService).toList()
+        val cpsvnoServices = listResourcesWithProperty(RDF.type, CPSVNO.Service).toList()
+        return publicServices + cpsvnoServices
     }
-
-    private fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> =
-        filter {
-            if (it.isURIResource) {
-                true
-            } else {
-                logger.warn("Blank node service or catalog filtered when harvesting $sourceURL")
-                false
-            }
-        }
 
     private fun Model.addAgentsAssociatedWithParticipation(resource: Resource): Model {
         resource.model
@@ -372,120 +117,12 @@ class ServiceHarvester(
             .filter { it.hasProperty(CV.playsRole, resource) }
             .forEach { codeElement ->
                 add(codeElement.listProperties())
-
                 codeElement
                     .listProperties()
                     .toList()
                     .filter { it.isResourceProperty() }
                     .forEach { add(it.resource.listProperties()) }
             }
-
         return this
     }
-
-    private fun generatedCatalog(
-        services: List<ServiceRDFModel>,
-        sourceURL: String,
-        organization: Organization?,
-    ): ServiceCatalogRDFModel {
-        val serviceURIs = services.map { it.resourceURI }.toSet()
-        val generatedCatalogURI = "$sourceURL#GeneratedCatalog"
-        val catalogModelWithoutServices =
-            createModelForHarvestSourceCatalog(generatedCatalogURI, serviceURIs, organization)
-
-        val catalogModel = ModelFactory.createDefaultModel()
-        services.forEach { catalogModel.add(it.harvested) }
-
-        return ServiceCatalogRDFModel(
-            resourceURI = generatedCatalogURI,
-            harvestedWithoutServices = catalogModelWithoutServices,
-            harvested = catalogModel.union(catalogModelWithoutServices),
-            services = serviceURIs,
-        )
-    }
-
-    private fun createModelForHarvestSourceCatalog(
-        catalogURI: String,
-        services: Set<String>,
-        organization: Organization?,
-    ): Model {
-        val catalogModel = ModelFactory.createDefaultModel()
-        catalogModel
-            .createResource(catalogURI)
-            .addProperty(RDF.type, DCAT.Catalog)
-            .addPublisherForGeneratedCatalog(organization?.uri)
-            .addLabelForGeneratedCatalog(organization, "Tjenestekatalog", "Service catalog")
-            .addServicesForGeneratedCatalog(services)
-
-        return catalogModel
-    }
-
-    private fun Resource.addServicesForGeneratedCatalog(services: Set<String>): Resource {
-        services.forEach { addProperty(DCATNO.containsService, model.createResource(it)) }
-        return this
-    }
-
-    private fun Model.recursiveAddNonServiceResources(resource: Resource): Model {
-        val types =
-            resource
-                .listProperties(RDF.type)
-                .toList()
-                .map { it.`object` }
-
-        if (resourceShouldBeAdded(resource, types)) {
-            add(resource.listProperties())
-
-            resource
-                .listProperties()
-                .toList()
-                .filter { it.isResourceProperty() }
-                .forEach { recursiveAddNonServiceResources(it.resource) }
-        }
-
-        if (types.contains(CV.Participation)) addAgentsAssociatedWithParticipation(resource)
-
-        return this
-    }
-
-    private fun Model.resourceShouldBeAdded(
-        resource: Resource,
-        types: List<RDFNode>,
-    ): Boolean =
-        when {
-            types.contains(CPSV.PublicService) -> false
-            types.contains(CPSVNO.Service) -> false
-            types.contains(CV.Event) -> false
-            types.contains(CV.BusinessEvent) -> false
-            types.contains(CV.LifeEvent) -> false
-            !resource.isURIResource -> true
-            containsTriple("<${resource.uri}>", "a", "?o") -> false
-            else -> true
-        }
-
-    private fun Resource.isMemberOfAnyCatalog(): Boolean {
-        val askQuery =
-            """ASK {
-        ?catalog a <${DCAT.Catalog.uri}> .
-        ?catalog <${DCATNO.containsService.uri}> <$uri> .
-    }
-            """.trimMargin()
-
-        val query = QueryFactory.create(askQuery)
-        return QueryExecutionFactory.create(query, model).execAsk()
-    }
-
-    private data class ServiceRDFModel(
-        val resourceURI: String,
-        val harvested: Model,
-        val isMemberOfAnyCatalog: Boolean,
-    )
-
-    private data class ServiceCatalogRDFModel(
-        val resourceURI: String,
-        val harvested: Model,
-        val harvestedWithoutServices: Model,
-        val services: Set<String>,
-    )
-
-    private fun List<ServiceRDFModel>.containsFreeServices(): Boolean = firstOrNull { !it.isMemberOfAnyCatalog } != null
 }

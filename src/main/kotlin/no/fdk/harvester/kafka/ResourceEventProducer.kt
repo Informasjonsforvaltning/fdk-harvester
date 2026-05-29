@@ -21,18 +21,19 @@ import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.stereotype.Service
 
 /**
- * Publishes type-specific Avro events (dataset, concept, dataservice, informationmodel, service, event)
- * to the corresponding Kafka topics for harvested and removed resources.
+ * Publishes type-specific Avro events to Kafka for harvested and removed resources.
+ *
+ * [DataType] maps to a topic via [topicByDataType]; [DataType.publicService] shares the service topic.
  */
 @Service
 class ResourceEventProducer(
     private val kafkaTemplate: KafkaTemplate<String, SpecificRecord>,
-    @param:Value("\${app.kafka.topic.dataset-events:dataset-events}") datasetEventsTopic: String,
-    @param:Value("\${app.kafka.topic.concept-events:concept-events}") conceptEventsTopic: String,
-    @param:Value("\${app.kafka.topic.dataservice-events:dataservice-events}") dataServiceEventsTopic: String,
-    @param:Value("\${app.kafka.topic.informationmodel-events:informationmodel-events}") informationModelEventsTopic: String,
-    @param:Value("\${app.kafka.topic.service-events:service-events}") serviceEventsTopic: String,
-    @param:Value("\${app.kafka.topic.event-events:event-events}") eventEventsTopic: String,
+    @Value("\${app.kafka.topic.dataset-events:dataset-events}") datasetEventsTopic: String,
+    @Value("\${app.kafka.topic.concept-events:concept-events}") conceptEventsTopic: String,
+    @Value("\${app.kafka.topic.dataservice-events:dataservice-events}") dataServiceEventsTopic: String,
+    @Value("\${app.kafka.topic.informationmodel-events:informationmodel-events}") informationModelEventsTopic: String,
+    @Value("\${app.kafka.topic.service-events:service-events}") serviceEventsTopic: String,
+    @Value("\${app.kafka.topic.event-events:event-events}") eventEventsTopic: String,
 ) {
     private val logger = LoggerFactory.getLogger(ResourceEventProducer::class.java)
 
