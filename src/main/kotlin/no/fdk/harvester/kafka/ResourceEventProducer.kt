@@ -87,7 +87,6 @@ class ResourceEventProducer(
 
         resources.forEach { resource ->
             try {
-                // Removed events don't need graph content
                 val event = createRemovedEvent(dataType, resource, runId)
 
                 if (event != null) {
@@ -212,7 +211,7 @@ class ResourceEventProducer(
                     runId,
                     resource.uri,
                     resource.fdkId,
-                    "", // Empty graph for removed events
+                    "",
                     timestamp,
                 )
             }
@@ -223,7 +222,7 @@ class ResourceEventProducer(
                     runId,
                     resource.uri,
                     resource.fdkId,
-                    "", // Empty graph for removed events
+                    "",
                     timestamp,
                 )
             }
@@ -234,7 +233,7 @@ class ResourceEventProducer(
                     runId,
                     resource.uri,
                     resource.fdkId,
-                    "", // Empty graph for removed events
+                    "",
                     timestamp,
                 )
             }
@@ -245,7 +244,7 @@ class ResourceEventProducer(
                     runId,
                     resource.uri,
                     resource.fdkId,
-                    "", // Empty graph for removed events
+                    "",
                     timestamp,
                 )
             }
@@ -256,7 +255,7 @@ class ResourceEventProducer(
                     runId,
                     resource.uri,
                     resource.fdkId,
-                    "", // Empty graph for removed events
+                    "",
                     timestamp,
                 )
             }

@@ -65,7 +65,6 @@ open class HarvestService(
         logger().debug("Initiating harvest for dataSourceId: $dataSourceId, dataType: $dataType, runId: $runId, forced: $effectiveForced")
 
         return try {
-            // Create HarvestDataSource
             val dataSource =
                 HarvestDataSource(
                     id = dataSourceId,

@@ -58,9 +58,8 @@ class DataServiceHarvester(
         val resourceGraphs = mutableMapOf<String, String>()
 
         val catalogPairs =
-            splitCatalogsFromRDF(harvested, sourceUrl)
+            extractCatalogs(harvested, sourceUrl)
                 .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
-        // Validate source ownership for all catalogs before filtering by change
         catalogPairs.forEach { (catalog, _) ->
             validateSourceUrl(
                 catalog.resourceURI,
@@ -106,7 +105,7 @@ class DataServiceHarvester(
                             harvestSource,
                             resourceRepository.findByIdOrNull(service.resourceURI),
                         )
-                        val result = service.updateDBOs(harvestDate, forceUpdate, harvestSource)
+                        val result = service.upsertResource(harvestDate, forceUpdate, harvestSource)
                         result?.let { serviceMeta ->
                             updatedServices.add(FdkIdAndUri(fdkId = serviceMeta.fdkId, uri = serviceMeta.uri))
                             val catalogRecordModel =
@@ -128,13 +127,12 @@ class DataServiceHarvester(
                 }
             }
 
-        // Mark data services as removed if they were harvested from this source but are no longer present
         val servicesFromThisSource =
             resourceRepository
                 .findAllByType(ResourceType.DATASERVICE)
                 .filter { it.harvestSource.id == harvestSource.id && !it.removed }
         val currentServiceUris =
-            splitCatalogsFromRDF(harvested, sourceUrl)
+            extractCatalogs(harvested, sourceUrl)
                 .flatMap { it.services.map { s -> s.resourceURI } }
                 .toSet()
         removedServices.addAll(
@@ -145,17 +143,15 @@ class DataServiceHarvester(
         logger.debug("Harvest of $sourceUrl completed")
 
         val report =
-            HarvestReport(
-                runId = runId,
-                dataSourceId = sourceId,
-                dataSourceUrl = sourceUrl,
-                dataType = "dataservice",
-                harvestError = false,
-                startTime = harvestDate.formatWithOsloTimeZone(),
-                endTime = formatNowWithOsloTimeZone(),
+            HarvestReportBuilder.createSuccessReport(
+                dataType = dataType,
+                sourceId = sourceId,
+                sourceUrl = sourceUrl,
+                harvestDate = harvestDate,
                 changedCatalogs = updatedCatalogs.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
                 changedResources = updatedServices,
                 removedResources = removedServices.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
+                runId = runId,
             )
 
         if (updatedServices.isNotEmpty()) {
@@ -178,7 +174,7 @@ class DataServiceHarvester(
         return report
     }
 
-    private fun DataServiceModel.updateDBOs(
+    private fun DataServiceModel.upsertResource(
         harvestDate: Calendar,
         forceUpdate: Boolean,
         harvestSource: HarvestSourceEntity,
@@ -209,14 +205,14 @@ class DataServiceHarvester(
         }
     }
 
-    private fun splitCatalogsFromRDF(
+    private fun extractCatalogs(
         harvested: Model,
         sourceURL: String,
     ): List<CatalogAndDataServiceModels> =
         harvested
             .listResourcesWithProperty(RDF.type, DCAT.Catalog)
             .toList()
-            .filterBlankNodeCatalogsAndServices(sourceURL)
+            .excludeBlankNodes(sourceURL)
             .map { catalogResource ->
                 val catalogServices: List<DataServiceModel> =
                     catalogResource
@@ -224,7 +220,7 @@ class DataServiceHarvester(
                         .toList()
                         .filter { it.isResourceProperty() }
                         .map { it.resource }
-                        .filterBlankNodeCatalogsAndServices(sourceURL)
+                        .excludeBlankNodes(sourceURL)
                         .map { it.extractDataService() }
 
                 val catalogModelWithoutServices =
@@ -267,7 +263,7 @@ class DataServiceHarvester(
         )
     }
 
-    private fun List<Resource>.filterBlankNodeCatalogsAndServices(sourceURL: String): List<Resource> =
+    private fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> =
         filter {
             if (it.isURIResource) {
                 true
@@ -325,7 +321,6 @@ class DataServiceHarvester(
         }
     }
 
-    // Data classes
     private data class CatalogAndDataServiceModels(
         val resourceURI: String,
         val harvestedCatalog: Model,

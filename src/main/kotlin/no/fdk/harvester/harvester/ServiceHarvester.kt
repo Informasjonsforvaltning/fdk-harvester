@@ -72,7 +72,7 @@ class ServiceHarvester(
                 null
             }
 
-        val catalogs = splitCatalogsFromRDF(harvested, allServices, sourceUrl, organization)
+        val catalogs = extractCatalogs(harvested, allServices, sourceUrl, organization)
         val (updatedCatalogs, serviceUriToCatalogFdkUri) =
             updateCatalogs(
                 catalogs,
@@ -137,7 +137,6 @@ class ServiceHarvester(
         harvestSource: HarvestSourceEntity,
     ): Pair<List<FdkIdAndUri>, Map<String, String>> {
         val serviceUriToCatalogFdkUri = mutableMapOf<String, String>()
-        // Validate source ownership for all catalogs before filtering by change
         catalogs.forEach { catalog ->
             validateSourceUrl(
                 catalog.resourceURI,
@@ -197,7 +196,7 @@ class ServiceHarvester(
         val updatedServices =
             services.mapNotNull {
                 it
-                    .updateDBOs(harvestDate, forceUpdate, harvestSource)
+                    .upsertResource(harvestDate, forceUpdate, harvestSource)
                     ?.let { meta ->
                         val catalogFdkUri = serviceUriToCatalogFdkUri[it.resourceURI]
 
@@ -219,7 +218,7 @@ class ServiceHarvester(
         return Pair(updatedServices, resourceGraphs)
     }
 
-    private fun ServiceRDFModel.updateDBOs(
+    private fun ServiceRDFModel.upsertResource(
         harvestDate: Calendar,
         forceUpdate: Boolean,
         harvestSource: HarvestSourceEntity,
@@ -264,7 +263,7 @@ class ServiceHarvester(
             .findAllByType(ResourceType.SERVICE)
             .filter { it.harvestSource.id == harvestSource.id && !it.removed && !services.contains(it.uri) }
 
-    private fun splitCatalogsFromRDF(
+    private fun extractCatalogs(
         harvested: Model,
         allServices: List<ServiceRDFModel>,
         sourceURL: String,
@@ -500,7 +499,6 @@ class ServiceHarvester(
         return QueryExecutionFactory.create(query, model).execAsk()
     }
 
-    // Data classes from ServiceHarvestHelpers
     private data class ServiceRDFModel(
         val resourceURI: String,
         val harvested: Model,
