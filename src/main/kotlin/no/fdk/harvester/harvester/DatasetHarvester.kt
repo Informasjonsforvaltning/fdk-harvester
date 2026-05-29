@@ -31,10 +31,10 @@ import no.fdk.harvest.DataType as HarvestDataType
 @Service
 class DatasetHarvester(
     private val applicationProperties: ApplicationProperties,
-    private val resourceRepository: ResourceRepository,
+    resourceRepository: ResourceRepository,
     harvestSourceRepository: HarvestSourceRepository,
     private val resourceEventProducer: ResourceEventProducer,
-) : BaseHarvester(harvestSourceRepository) {
+) : BaseHarvester(harvestSourceRepository, resourceRepository) {
     fun harvestDatasetCatalog(
         source: HarvestDataSource,
         harvestDate: Calendar,
@@ -96,12 +96,18 @@ class DatasetHarvester(
                     "${applicationProperties.datasetUri.substringBeforeLast("/")}/catalogs/${catalogMeta.fdkId}"
                 it.first.datasets.forEach { dataset ->
                     try {
-                        validateSourceUrl(
-                            dataset.resource.uri,
-                            harvestSource,
-                            resourceRepository.findByIdOrNull(dataset.resource.uri),
-                        )
-                        val result = dataset.upsertResource(harvestDate, forceUpdate, harvestSource)
+                        val dbMeta = resourceRepository.findByIdOrNull(dataset.resource.uri)
+                        validateSourceUrl(dataset.resource.uri, harvestSource, dbMeta)
+                        val result =
+                            upsertResource(
+                                uri = dataset.resource.uri,
+                                type = ResourceType.DATASET,
+                                harvestedChecksum = computeChecksum(dataset.harvestedDataset),
+                                harvestDate = harvestDate,
+                                forceUpdate = forceUpdate,
+                                harvestSource = harvestSource,
+                                dbMeta = dbMeta,
+                            )
                         result?.let { datasetMeta ->
                             updatedDatasets.add(datasetMeta)
                             val catalogRecordModel =
@@ -123,14 +129,8 @@ class DatasetHarvester(
                 }
             }
 
-        val datasetsFromThisSource =
-            resourceRepository
-                .findAllByType(ResourceType.DATASET)
-                .filter { it.harvestSource.id == harvestSource.id && !it.removed }
         val currentDatasetUris = catalogPairs.flatMap { it.first.datasets.map { ds -> ds.resource.uri } }.toSet()
-        removedDatasets.addAll(
-            datasetsFromThisSource.filter { !currentDatasetUris.contains(it.uri) },
-        )
+        removedDatasets.addAll(findRemovedResources(ResourceType.DATASET, currentDatasetUris, harvestSource))
         removedDatasets.map { it.copy(removed = true) }.run { resourceRepository.saveAll(this) }
 
         logger.debug("Harvest of $sourceUrl completed")
@@ -164,37 +164,6 @@ class DatasetHarvester(
         }
 
         return report
-    }
-
-    private fun DatasetModel.upsertResource(
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity? {
-        val dbMeta = resourceRepository.findByIdOrNull(resource.uri)
-        val harvestedChecksum = computeChecksum(harvestedDataset)
-        return when {
-            dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
-                val datasetMeta =
-                    createResourceEntity(resource.uri, ResourceType.DATASET, harvestedChecksum, harvestDate, harvestSource, dbMeta)
-                resourceRepository.save(datasetMeta)
-                datasetMeta
-            }
-
-            forceUpdate -> {
-                val updatedMeta =
-                    dbMeta.copy(
-                        checksum = harvestedChecksum,
-                        harvestSource = harvestSource,
-                    )
-                resourceRepository.save(updatedMeta)
-                updatedMeta
-            }
-
-            else -> {
-                null
-            }
-        }
     }
 
     private fun extractCatalogs(

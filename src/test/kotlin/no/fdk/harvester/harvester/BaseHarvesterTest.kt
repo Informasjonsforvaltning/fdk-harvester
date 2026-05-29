@@ -9,6 +9,7 @@ import no.fdk.harvester.model.HarvestReport
 import no.fdk.harvester.model.HarvestSourceEntity
 import no.fdk.harvester.model.ResourceEntity
 import no.fdk.harvester.repository.HarvestSourceRepository
+import no.fdk.harvester.repository.ResourceRepository
 import org.junit.jupiter.api.Assertions.assertDoesNotThrow
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
@@ -23,13 +24,14 @@ import java.util.Calendar
 @Tag("unit")
 class BaseHarvesterTest {
     private val harvestSourceRepository: HarvestSourceRepository = mockk()
+    private val resourceRepository: ResourceRepository = mockk(relaxed = true)
 
     private lateinit var testHarvester: TestHarvester
 
     @BeforeEach
     fun setUp() {
         clearAllMocks()
-        testHarvester = TestHarvester(harvestSourceRepository)
+        testHarvester = TestHarvester(harvestSourceRepository, resourceRepository)
     }
 
     @Test
@@ -153,7 +155,8 @@ class BaseHarvesterTest {
     // Test implementation of BaseHarvester for testing
     private class TestHarvester(
         harvestSourceRepository: HarvestSourceRepository,
-    ) : BaseHarvester(harvestSourceRepository) {
+        resourceRepository: ResourceRepository,
+    ) : BaseHarvester(harvestSourceRepository, resourceRepository) {
         override fun updateDB(
             harvested: org.apache.jena.rdf.model.Model,
             source: HarvestDataSource,

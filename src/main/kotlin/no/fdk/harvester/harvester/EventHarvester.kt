@@ -37,10 +37,10 @@ import no.fdk.harvest.DataType as HarvestDataType
 class EventHarvester(
     private val applicationProperties: ApplicationProperties,
     private val orgAdapter: DefaultOrganizationsAdapter,
-    private val resourceRepository: ResourceRepository,
+    resourceRepository: ResourceRepository,
     private val resourceEventProducer: ResourceEventProducer,
     harvestSourceRepository: HarvestSourceRepository,
-) : BaseHarvester(harvestSourceRepository) {
+) : BaseHarvester(harvestSourceRepository, resourceRepository) {
     fun harvestEvents(
         source: HarvestDataSource,
         harvestDate: Calendar,
@@ -85,12 +85,8 @@ class EventHarvester(
                 eventUriToCatalogFdkUri,
             )
 
-        val eventsFromThisSource =
-            resourceRepository
-                .findAllByType(ResourceType.EVENT)
-                .filter { it.harvestSource.id == harvestSource.id && !it.removed }
         val currentEventUris = allEvents.map { it.eventURI }.toSet()
-        val removedEvents = eventsFromThisSource.filter { !currentEventUris.contains(it.uri) }
+        val removedEvents = findRemovedResources(ResourceType.EVENT, currentEventUris, harvestSource)
 
         removedEvents
             .map { it.copy(removed = true) }
@@ -192,11 +188,20 @@ class EventHarvester(
     ): Pair<List<FdkIdAndUri>, Map<String, String>> {
         val resourceGraphs = mutableMapOf<String, String>()
         val updatedEvents =
-            events.mapNotNull {
-                it
-                    .upsertResource(harvestDate, forceUpdate, harvestSource)
-                    ?.let { meta ->
-                        val catalogFdkUri = eventUriToCatalogFdkUri[it.eventURI]
+            events.mapNotNull { event ->
+                try {
+                    val dbMeta = resourceRepository.findByIdOrNull(event.eventURI)
+                    validateSourceUrl(event.eventURI, harvestSource, dbMeta)
+                    upsertResource(
+                        uri = event.eventURI,
+                        type = ResourceType.EVENT,
+                        harvestedChecksum = computeChecksum(event.harvested),
+                        harvestDate = harvestDate,
+                        forceUpdate = forceUpdate,
+                        harvestSource = harvestSource,
+                        dbMeta = dbMeta,
+                    )?.let { meta ->
+                        val catalogFdkUri = eventUriToCatalogFdkUri[event.eventURI]
 
                         val catalogRecordModel =
                             createCatalogRecordModel(
@@ -213,50 +218,17 @@ class EventHarvester(
                                         null
                                     },
                             )
-                        val graphWithRecords = it.harvested.union(catalogRecordModel)
+                        val graphWithRecords = event.harvested.union(catalogRecordModel)
                         val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
                         resourceGraphs[meta.fdkId] = graphString
-                        FdkIdAndUri(fdkId = meta.fdkId, uri = it.eventURI)
+                        FdkIdAndUri(fdkId = meta.fdkId, uri = event.eventURI)
                     }
-            }
-        return Pair(updatedEvents, resourceGraphs)
-    }
-
-    private fun EventRDFModel.upsertResource(
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity? {
-        try {
-            val dbMeta = resourceRepository.findByIdOrNull(eventURI)
-            validateSourceUrl(eventURI, harvestSource, dbMeta)
-            val harvestedChecksum = computeChecksum(harvested)
-            return when {
-                dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
-                    val updatedMeta =
-                        createResourceEntity(eventURI, ResourceType.EVENT, harvestedChecksum, harvestDate, harvestSource, dbMeta)
-                    resourceRepository.save(updatedMeta)
-                    updatedMeta
-                }
-
-                forceUpdate -> {
-                    val updatedMeta =
-                        dbMeta.copy(
-                            checksum = harvestedChecksum,
-                            harvestSource = harvestSource,
-                        )
-                    resourceRepository.save(updatedMeta)
-                    updatedMeta
-                }
-
-                else -> {
+                } catch (conflictError: HarvestSourceConflictException) {
+                    logger.warn("Event skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
                     null
                 }
             }
-        } catch (conflictError: HarvestSourceConflictException) {
-            logger.warn("Event skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
-            return null
-        }
+        return Pair(updatedEvents, resourceGraphs)
     }
 
     private fun splitEventsFromRDF(

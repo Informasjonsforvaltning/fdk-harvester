@@ -30,10 +30,10 @@ import no.fdk.harvest.DataType as HarvestDataType
 @Service
 class DataServiceHarvester(
     private val applicationProperties: ApplicationProperties,
-    private val resourceRepository: ResourceRepository,
+    resourceRepository: ResourceRepository,
     private val resourceEventProducer: ResourceEventProducer,
     harvestSourceRepository: HarvestSourceRepository,
-) : BaseHarvester(harvestSourceRepository) {
+) : BaseHarvester(harvestSourceRepository, resourceRepository) {
     fun harvestDataServiceCatalog(
         source: HarvestDataSource,
         harvestDate: Calendar,
@@ -100,12 +100,18 @@ class DataServiceHarvester(
                     "${applicationProperties.dataserviceUri.substringBeforeLast("/")}/catalogs/${catalogMeta.fdkId}"
                 it.first.services.forEach { service ->
                     try {
-                        validateSourceUrl(
-                            service.resourceURI,
-                            harvestSource,
-                            resourceRepository.findByIdOrNull(service.resourceURI),
-                        )
-                        val result = service.upsertResource(harvestDate, forceUpdate, harvestSource)
+                        val dbMeta = resourceRepository.findByIdOrNull(service.resourceURI)
+                        validateSourceUrl(service.resourceURI, harvestSource, dbMeta)
+                        val result =
+                            upsertResource(
+                                uri = service.resourceURI,
+                                type = ResourceType.DATASERVICE,
+                                harvestedChecksum = computeChecksum(service.harvestedService),
+                                harvestDate = harvestDate,
+                                forceUpdate = forceUpdate,
+                                harvestSource = harvestSource,
+                                dbMeta = dbMeta,
+                            )
                         result?.let { serviceMeta ->
                             updatedServices.add(FdkIdAndUri(fdkId = serviceMeta.fdkId, uri = serviceMeta.uri))
                             val catalogRecordModel =
@@ -127,17 +133,11 @@ class DataServiceHarvester(
                 }
             }
 
-        val servicesFromThisSource =
-            resourceRepository
-                .findAllByType(ResourceType.DATASERVICE)
-                .filter { it.harvestSource.id == harvestSource.id && !it.removed }
         val currentServiceUris =
             extractCatalogs(harvested, sourceUrl)
                 .flatMap { it.services.map { s -> s.resourceURI } }
                 .toSet()
-        removedServices.addAll(
-            servicesFromThisSource.filter { !currentServiceUris.contains(it.uri) },
-        )
+        removedServices.addAll(findRemovedResources(ResourceType.DATASERVICE, currentServiceUris, harvestSource))
 
         removedServices.map { it.copy(removed = true) }.run { resourceRepository.saveAll(this) }
         logger.debug("Harvest of $sourceUrl completed")
@@ -172,37 +172,6 @@ class DataServiceHarvester(
         }
 
         return report
-    }
-
-    private fun DataServiceModel.upsertResource(
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        harvestSource: HarvestSourceEntity,
-    ): ResourceEntity? {
-        val dbMeta = resourceRepository.findByIdOrNull(resourceURI)
-        val harvestedChecksum = computeChecksum(harvestedService)
-        return when {
-            dbMeta == null || dbMeta.removed || checksumHasChanged(dbMeta, harvestedChecksum) -> {
-                val updatedMeta =
-                    createResourceEntity(resourceURI, ResourceType.DATASERVICE, harvestedChecksum, harvestDate, harvestSource, dbMeta)
-                resourceRepository.save(updatedMeta)
-                updatedMeta
-            }
-
-            forceUpdate -> {
-                val updatedMeta =
-                    dbMeta.copy(
-                        checksum = harvestedChecksum,
-                        harvestSource = harvestSource,
-                    )
-                resourceRepository.save(updatedMeta)
-                updatedMeta
-            }
-
-            else -> {
-                null
-            }
-        }
     }
 
     private fun extractCatalogs(
