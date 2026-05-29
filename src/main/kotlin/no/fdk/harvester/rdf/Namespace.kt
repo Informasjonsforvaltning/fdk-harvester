@@ -30,6 +30,7 @@ class CPSVNO {
         private val m = ModelFactory.createDefaultModel()
         const val URI = "https://data.norge.no/vocabulary/cpsvno#"
         val Service: Property = m.createProperty("${URI}Service")
+        val RequiredEvidence: Property = m.createProperty("${URI}RequiredEvidence")
     }
 }
 
@@ -43,6 +44,7 @@ class CV {
         val LifeEvent: Property = m.createProperty("${URI}LifeEvent")
         val Participation: Property = m.createProperty("${URI}Participation")
         val playsRole: Property = m.createProperty("${URI}playsRole")
+        val Output: Property = m.createProperty("${URI}Output")
     }
 }
 

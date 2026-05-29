@@ -1,13 +1,10 @@
 package no.fdk.harvester.harvester
 
-import no.fdk.harvester.model.Organization
-import no.fdk.harvester.model.PrefLabel
 import org.apache.jena.rdf.model.ModelFactory
 import org.apache.jena.vocabulary.RDF
 import org.apache.jena.vocabulary.SKOS
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 
@@ -24,52 +21,17 @@ class HarvestHelpersTest {
     }
 
     @Test
-    fun `splitConceptsFromRDF filters blank node concepts`() {
+    fun `excludeBlankNodes drops blank nodes and keeps URI resources`() {
         val m = ModelFactory.createDefaultModel()
-        val bn = m.createResource() // blank node
-        bn.addProperty(RDF.type, SKOS.Concept)
+        val uriResource = m.createResource("http://example.org/concept1")
+        uriResource.addProperty(RDF.type, SKOS.Concept)
+        val blankNode = m.createResource()
+        blankNode.addProperty(RDF.type, SKOS.Concept)
 
-        val concepts = splitConceptsFromRDF(m, "http://example.org/source")
-        assertTrue(concepts.isEmpty())
-    }
+        val filtered =
+            listOf(uriResource, blankNode).excludeBlankNodes("http://example.org/source")
 
-    @Test
-    fun `splitCollectionsFromRDF generates a collection when there are free concepts and organization labels are used`() {
-        val m = ModelFactory.createDefaultModel()
-
-        // one concept not member of any collection
-        val concept = m.createResource("http://example.org/concept1")
-        concept.addProperty(RDF.type, SKOS.Concept)
-
-        val concepts = splitConceptsFromRDF(m, "http://example.org/source")
-        val org =
-            Organization(
-                organizationId = "1",
-                uri = "http://example.org/org",
-                name = "OrgName",
-                prefLabel = PrefLabel(nb = "NB", nn = "NN", en = "EN"),
-            )
-
-        val collections =
-            splitCollectionsFromRDF(
-                harvested = m,
-                allConcepts = concepts,
-                sourceURL = "http://example.org/source",
-                organization = org,
-            )
-
-        // generated collection should be present
-        assertTrue(collections.any { it.resourceURI == "http://example.org/source#GeneratedCollection" })
-    }
-
-    @Test
-    fun `containsConceptsWithoutCollection detects free concepts`() {
-        val m = ModelFactory.createDefaultModel()
-        val concept = m.createResource("http://example.org/concept1")
-        concept.addProperty(RDF.type, SKOS.Concept)
-
-        val concepts = splitConceptsFromRDF(m, "http://example.org/source")
-        assertTrue(concepts.containsConceptsWithoutCollection())
-        assertEquals(1, concepts.size)
+        assertEquals(1, filtered.size)
+        assertEquals("http://example.org/concept1", filtered.first().uri)
     }
 }

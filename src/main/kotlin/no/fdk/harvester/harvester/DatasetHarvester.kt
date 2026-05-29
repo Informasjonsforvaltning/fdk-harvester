@@ -1,28 +1,20 @@
 package no.fdk.harvester.harvester
 
+import no.fdk.harvester.adapter.DefaultOrganizationsAdapter
 import no.fdk.harvester.config.ApplicationProperties
 import no.fdk.harvester.kafka.ResourceEventProducer
-import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestReport
-import no.fdk.harvester.model.HarvestSourceEntity
-import no.fdk.harvester.model.ResourceEntity
+import no.fdk.harvester.model.Organization
 import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.DCAT3
-import no.fdk.harvester.rdf.computeChecksum
-import no.fdk.harvester.rdf.containsTriple
-import no.fdk.harvester.rdf.createCatalogRecordModel
-import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
-import org.apache.jena.rdf.model.ModelFactory
+import org.apache.jena.rdf.model.RDFNode
 import org.apache.jena.rdf.model.Resource
-import org.apache.jena.rdf.model.Statement
-import org.apache.jena.riot.Lang
 import org.apache.jena.vocabulary.DCAT
 import org.apache.jena.vocabulary.RDF
-import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import java.util.Calendar
 import no.fdk.harvest.DataType as HarvestDataType
@@ -30,11 +22,18 @@ import no.fdk.harvest.DataType as HarvestDataType
 /** Harvests DCAT dataset catalogs from RDF and publishes dataset events (with FDK catalog records in the graph). */
 @Service
 class DatasetHarvester(
-    private val applicationProperties: ApplicationProperties,
+    applicationProperties: ApplicationProperties,
+    orgAdapter: DefaultOrganizationsAdapter,
     resourceRepository: ResourceRepository,
     harvestSourceRepository: HarvestSourceRepository,
-    private val resourceEventProducer: ResourceEventProducer,
-) : BaseHarvester(harvestSourceRepository, resourceRepository) {
+    resourceEventProducer: ResourceEventProducer,
+) : ResourceHarvester(
+        harvestSourceRepository,
+        resourceRepository,
+        applicationProperties,
+        orgAdapter,
+        resourceEventProducer,
+    ) {
     fun harvestDatasetCatalog(
         source: HarvestDataSource,
         harvestDate: Calendar,
@@ -42,288 +41,78 @@ class DatasetHarvester(
         runId: String,
     ): HarvestReport? = validateAndHarvest(source, harvestDate, forceUpdate, runId, "dataset", requiresAcceptHeader = true)
 
-    override fun updateDB(
-        harvested: Model,
-        source: HarvestDataSource,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        runId: String,
-        dataType: String,
-        harvestSource: HarvestSourceEntity,
-    ): HarvestReport {
-        val sourceId = source.id!!
-        val sourceUrl = source.url!!
-        val updatedCatalogs = mutableListOf<ResourceEntity>()
-        val updatedDatasets = mutableListOf<ResourceEntity>()
-        val removedDatasets = mutableListOf<ResourceEntity>()
-        val resourceGraphs = mutableMapOf<String, String>()
-        val catalogPairs =
-            extractCatalogs(harvested, sourceUrl)
-                .map { Pair(it, resourceRepository.findByIdOrNull(it.resource.uri)) }
-        catalogPairs.forEach { (catalog, dbCatalog) ->
-            validateSourceUrl(catalog.resource.uri, harvestSource, dbCatalog)
-        }
-        catalogPairs
-            .filter { forceUpdate || checksumHasChanged(it.second, computeChecksum(it.first.harvestedCatalog)) }
-            .forEach {
-                val dbMeta = it.second
-                val catalogChecksum = computeChecksum(it.first.harvestedCatalog)
-                val catalogMeta =
-                    if (dbMeta == null || checksumHasChanged(dbMeta, catalogChecksum)) {
-                        createResourceEntity(
-                            it.first.resource.uri,
-                            ResourceType.CATALOG,
-                            catalogChecksum,
-                            harvestDate,
-                            harvestSource,
-                            dbMeta,
-                        ).also { updatedMeta -> resourceRepository.save(updatedMeta) }
-                    } else {
-                        if (forceUpdate) {
-                            dbMeta
-                                .copy(
-                                    checksum = catalogChecksum,
-                                    modified = harvestDate.toInstant(),
-                                    harvestSource = harvestSource,
-                                ).also { resourceRepository.save(it) }
-                        } else {
-                            dbMeta
-                        }
-                    }
-                updatedCatalogs.add(catalogMeta)
+    override val harvestConfig =
+        ResourceHarvestConfig(
+            harvestDataType = HarvestDataType.dataset,
+            resourceType = ResourceType.DATASET,
+            containerResourceType = ResourceType.CATALOG,
+            fdkResourceUriBase = applicationProperties.datasetUri,
+            containerFdkUriBase = "${applicationProperties.datasetUri.substringBeforeLast("/")}/catalogs",
+            generatedCatalogNbLabel = "Datasettkatalog",
+            generatedCatalogEnLabel = "Dataset catalog",
+            conflictSkipLabel = "Dataset",
+            missingParentLogMessage = { uri -> "The dataset $uri is missing associated catalog uri" },
+        )
 
-                val catalogFdkUri =
-                    "${applicationProperties.datasetUri.substringBeforeLast("/")}/catalogs/${catalogMeta.fdkId}"
-                it.first.datasets.forEach { dataset ->
-                    try {
-                        val dbMeta = resourceRepository.findByIdOrNull(dataset.resource.uri)
-                        validateSourceUrl(dataset.resource.uri, harvestSource, dbMeta)
-                        val result =
-                            upsertResource(
-                                uri = dataset.resource.uri,
-                                type = ResourceType.DATASET,
-                                harvestedChecksum = computeChecksum(dataset.harvestedDataset),
-                                harvestDate = harvestDate,
-                                forceUpdate = forceUpdate,
-                                harvestSource = harvestSource,
-                                dbMeta = dbMeta,
-                            )
-                        result?.let { datasetMeta ->
-                            updatedDatasets.add(datasetMeta)
-                            val catalogRecordModel =
-                                createCatalogRecordModel(
-                                    resourceUri = datasetMeta.uri,
-                                    fdkId = datasetMeta.fdkId,
-                                    parentFdkUri = catalogFdkUri,
-                                    issued = datasetMeta.issued,
-                                    modified = datasetMeta.modified,
-                                    fdkUriBase = applicationProperties.datasetUri,
-                                )
-                            val graphWithRecords = dataset.harvestedDataset.union(catalogRecordModel)
-                            val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
-                            resourceGraphs[datasetMeta.fdkId] = graphString
-                        }
-                    } catch (conflictError: HarvestSourceConflictException) {
-                        logger.warn("Dataset skipped due to conflict when harvesting {}: {}", harvestSource.uri, conflictError.message)
-                    }
-                }
-            }
+    override fun containerRdfType(): Resource = DCAT.Catalog
 
-        val currentDatasetUris = catalogPairs.flatMap { it.first.datasets.map { ds -> ds.resource.uri } }.toSet()
-        removedDatasets.addAll(findRemovedResources(ResourceType.DATASET, currentDatasetUris, harvestSource))
-        removedDatasets.map { it.copy(removed = true) }.run { resourceRepository.saveAll(this) }
-
-        logger.debug("Harvest of $sourceUrl completed")
-        val report =
-            HarvestReportBuilder.createSuccessReport(
-                dataType = dataType,
-                sourceId = sourceId,
-                sourceUrl = sourceUrl,
-                harvestDate = harvestDate,
-                changedCatalogs = updatedCatalogs.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
-                changedResources = updatedDatasets.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
-                removedResources = removedDatasets.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
-                runId = runId,
-            )
-
-        if (updatedDatasets.isNotEmpty()) {
-            resourceEventProducer.publishHarvestedEvents(
-                dataType = HarvestDataType.dataset,
-                resources = updatedDatasets.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
-                resourceGraphs = resourceGraphs,
-                runId = runId,
-            )
-        }
-
-        if (removedDatasets.isNotEmpty()) {
-            resourceEventProducer.publishRemovedEvents(
-                dataType = HarvestDataType.dataset,
-                resources = removedDatasets.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
-                runId = runId,
-            )
-        }
-
-        return report
-    }
-
-    private fun extractCatalogs(
+    override fun listMembers(
         harvested: Model,
         sourceURL: String,
-    ): List<CatalogAndDatasetModels> =
-        harvested
-            .listResourcesWithProperty(RDF.type, DCAT.Catalog)
-            .toList()
+    ): List<MemberRDFModel> {
+        val datasets = harvested.listResourcesWithProperty(RDF.type, DCAT.Dataset).toList()
+        val series = harvested.listResourcesWithProperty(RDF.type, DCAT3.DatasetSeries).toList()
+        return (datasets + series)
+            .distinct()
             .excludeBlankNodes(sourceURL)
-            .map { catalogResource ->
-                val catalogDatasets: List<DatasetModel> =
-                    catalogResource
-                        .listProperties(DCAT.dataset)
-                        .toList()
-                        .filter { it.isResourceProperty() }
-                        .map { it.resource }
-                        .flatMap { it.extractDatasetsInSeries() }
-                        .filter { it.isDataset() }
-                        .excludeBlankNodes(sourceURL)
-                        .map { it.extractDataset() }
-
-                val catalogModelWithoutDatasets = catalogResource.extractCatalogModel()
-
-                catalogModelWithoutDatasets.recursiveBlankNodeSkolem(catalogResource.uri)
-
-                val datasetsUnion = ModelFactory.createDefaultModel()
-                catalogDatasets.forEach { datasetsUnion.add(it.harvestedDataset) }
-
-                CatalogAndDatasetModels(
-                    resource = catalogResource,
-                    harvestedCatalog = catalogModelWithoutDatasets.union(datasetsUnion),
-                    harvestedCatalogWithoutDatasets = catalogModelWithoutDatasets,
-                    datasets = catalogDatasets,
-                )
-            }
-
-    private fun Resource.extractCatalogModel(): Model {
-        val catalogModelWithoutServices = ModelFactory.createDefaultModel()
-        catalogModelWithoutServices.setNsPrefixes(model.nsPrefixMap)
-        listProperties()
-            .toList()
-            .forEach { catalogModelWithoutServices.addCatalogProperties(it) }
-        return catalogModelWithoutServices
+            .map { it.extractMember(DCAT.dataset) }
     }
 
-    private fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> =
-        filter {
-            if (it.isURIResource) {
-                true
-            } else {
-                logger.error(
-                    "Failed harvest of catalog or dataset for $sourceURL, unable to harvest blank node catalogs and dataset",
-                    Exception("unable to harvest blank node catalogs and datasets"),
-                )
-                false
-            }
-        }
-
-    private fun Model.addCatalogProperties(property: Statement): Model =
-        when {
-            property.predicate != DCAT.dataset && property.isResourceProperty() -> {
-                add(property).recursiveAddNonDatasetResource(property.resource)
-            }
-
-            property.predicate != DCAT.dataset -> {
-                add(property)
-            }
-
-            property.isResourceProperty() && property.resource.isURIResource -> {
-                add(property)
-            }
-
-            else -> {
+    override fun extractContainers(
+        harvested: Model,
+        members: List<MemberRDFModel>,
+        sourceURL: String,
+        organization: Organization?,
+    ): List<ContainerRDFModel> =
+        extractContainersWithOrphans(
+            harvested = harvested,
+            members = members,
+            sourceURL = sourceURL,
+            organization = organization,
+            memberLinkProperty = DCAT.dataset,
+            addMembersToGeneratedContainer = { memberUris ->
+                memberUris.forEach { addProperty(DCAT.dataset, model.createResource(it)) }
                 this
-            }
-        }
-
-    private fun Resource.extractDataset(): DatasetModel {
-        val datasetModel = listProperties().toModel()
-        datasetModel.setNsPrefixes(model.nsPrefixMap)
-
-        listProperties()
-            .toList()
-            .filter { it.isResourceProperty() }
-            .forEach { datasetModel.recursiveAddNonDatasetResource(it.resource) }
-
-        return DatasetModel(resource = this, harvestedDataset = datasetModel.recursiveBlankNodeSkolem(uri))
-    }
-
-    private fun Model.recursiveAddNonDatasetResource(resource: Resource): Model {
-        if (resourceShouldBeAdded(resource)) {
-            add(resource.listProperties())
-
-            resource
-                .listProperties()
-                .toList()
-                .filter { it.isResourceProperty() }
-                .forEach { recursiveAddNonDatasetResource(it.resource) }
-        }
-
-        return this
-    }
-
-    private fun Model.resourceShouldBeAdded(resource: Resource): Boolean {
-        val types =
-            resource
-                .listProperties(RDF.type)
-                .toList()
-                .map { it.`object` }
-
-        return when {
-            types.contains(DCAT.Dataset) -> false
-            types.contains(DCAT3.DatasetSeries) -> false
-            !resource.isURIResource -> true
-            containsTriple("<${resource.uri}>", "a", "?o") -> false
-            else -> true
-        }
-    }
-
-    private fun Resource.extractDatasetsInSeries(): List<Resource> {
-        val types =
-            listProperties(RDF.type)
-                .toList()
-                .map { it.`object` }
-
-        return if (types.contains(DCAT3.DatasetSeries)) {
-            val datasetsInSeries =
-                model
-                    .listResourcesWithProperty(DCAT3.inSeries, this)
+            },
+            resolveContainerMemberUris = { containerResource ->
+                containerResource
+                    .listProperties(DCAT.dataset)
                     .toList()
-            datasetsInSeries.add(this)
-            datasetsInSeries
+                    .filter { it.isResourceProperty() }
+                    .map { it.resource }
+                    .flatMap { it.expandDatasetSeriesMembers() }
+                    .filter { it.isHarvestableDataset() }
+                    .excludeBlankNodes(sourceURL)
+                    .map { it.uri }
+                    .toSet()
+            },
+        )
+
+    override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean =
+        types.contains(DCAT.Dataset) || types.contains(DCAT3.DatasetSeries)
+
+    private fun Resource.expandDatasetSeriesMembers(): List<Resource> {
+        val types = listProperties(RDF.type).toList().map { it.`object` }
+        return if (types.contains(DCAT3.DatasetSeries)) {
+            val datasetsInSeries = model.listResourcesWithProperty(DCAT3.inSeries, this).toList()
+            datasetsInSeries + this
         } else {
             listOf(this)
         }
     }
 
-    private fun Resource.isDataset(): Boolean {
-        val types =
-            listProperties(RDF.type)
-                .toList()
-                .map { it.`object` }
-
-        return when {
-            types.contains(DCAT.Dataset) -> true
-            types.contains(DCAT3.DatasetSeries) -> true
-            else -> false
-        }
+    private fun Resource.isHarvestableDataset(): Boolean {
+        val types = listProperties(RDF.type).toList().map { it.`object` }
+        return types.contains(DCAT.Dataset) || types.contains(DCAT3.DatasetSeries)
     }
-
-    private data class CatalogAndDatasetModels(
-        val resource: Resource,
-        val harvestedCatalog: Model,
-        val harvestedCatalogWithoutDatasets: Model,
-        val datasets: List<DatasetModel>,
-    )
-
-    private data class DatasetModel(
-        val resource: Resource,
-        val harvestedDataset: Model,
-    )
 }

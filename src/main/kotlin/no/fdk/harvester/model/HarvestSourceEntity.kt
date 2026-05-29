@@ -11,7 +11,7 @@ import java.time.Instant
 /** JPA entity for a harvest source (URI, checksum, issued, initialized). */
 @Entity
 @Table(name = "harvest_source")
-data class HarvestSourceEntity(
+class HarvestSourceEntity(
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id")
@@ -25,4 +25,12 @@ data class HarvestSourceEntity(
     /** True after the first successful harvest for this source; until then harvests run forced. */
     @Column(name = "initialized", nullable = false)
     val initialized: Boolean = false,
-)
+) {
+    fun copy(
+        id: Long? = this.id,
+        uri: String = this.uri,
+        checksum: String = this.checksum,
+        issued: Instant = this.issued,
+        initialized: Boolean = this.initialized,
+    ): HarvestSourceEntity = HarvestSourceEntity(id, uri, checksum, issued, initialized)
+}

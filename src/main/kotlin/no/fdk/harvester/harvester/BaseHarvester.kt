@@ -32,7 +32,10 @@ private const val MAX_CONTENT_SIZE = 75 * 1024 * 1024 // 75MB
 
 /**
  * Base harvester: fetches RDF from a [HarvestDataSource], parses it, and delegates type-specific
- * updates to [updateDB]. Subclasses implement harvest for concept, dataset, dataservice, etc.
+ * persistence and event publishing to [updateDB].
+ *
+ * Type-specific harvesters extend [ResourceHarvester] (dataset, dataservice, information
+ * model, service, event, concept).
  */
 abstract class BaseHarvester(
     private val harvestSourceRepository: HarvestSourceRepository,
@@ -115,9 +118,8 @@ abstract class BaseHarvester(
         return try {
             logger.debug("Starting harvest of ${source.url}")
 
-            val jenaWriterType = jenaTypeFromAcceptHeader(source.acceptHeaderValue)
-            when {
-                jenaWriterType == null -> {
+            when (val jenaWriterType = jenaTypeFromAcceptHeader(source.acceptHeaderValue)) {
+                null -> {
                     logger.error(
                         "Not able to harvest from ${source.url}, no accept header supplied",
                         HarvestException(source.url),
@@ -135,8 +137,7 @@ abstract class BaseHarvester(
                         runId = runId,
                     )
                 }
-
-                jenaWriterType == Lang.RDFNULL -> {
+                Lang.RDFNULL -> {
                     logger.error(
                         "Not able to harvest from ${source.url}, header ${source.acceptHeaderValue} is not acceptable",
                         HarvestException(source.url),
@@ -154,7 +155,6 @@ abstract class BaseHarvester(
                         runId = runId,
                     )
                 }
-
                 else -> {
                     val harvested = parseRDF(fetchContent(source), jenaWriterType)
                     updateIfChanged(harvested, source, harvestDate, forceUpdate, runId, dataType)
@@ -236,7 +236,7 @@ abstract class BaseHarvester(
      * @param resourceUri The URI of the resource to validate
      * @param harvestSource The harvest source attempting to harvest this resource
      * @param dbResource The existing resource from the database (if any)
-     * @throws HarvestException if validation fails
+     * @throws HarvestSourceConflictException if the resource belongs to another harvest source
      */
     protected fun validateSourceUrl(
         resourceUri: String,
@@ -300,8 +300,8 @@ abstract class BaseHarvester(
             .filter { it.harvestSource.id == harvestSource.id && !it.removed && !currentUris.contains(it.uri) }
 
     /**
-     * Abstract method for type-specific database update logic.
-     * Subclasses implement this to handle their specific resource types.
+     * Type-specific harvest logic: parse RDF into resources, update the database, and build the report.
+     * Implemented by [ResourceHarvester]
      */
     protected abstract fun updateDB(
         harvested: Model,

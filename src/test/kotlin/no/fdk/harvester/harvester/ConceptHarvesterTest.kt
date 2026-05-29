@@ -34,11 +34,11 @@ class ConceptHarvesterTest {
             )
         conceptHarvester =
             ConceptHarvester(
+                appProps,
                 orgAdapter,
                 resourceRepository,
-                resourceEventProducer,
-                appProps,
                 harvestSourceRepository,
+                resourceEventProducer,
             )
     }
 
