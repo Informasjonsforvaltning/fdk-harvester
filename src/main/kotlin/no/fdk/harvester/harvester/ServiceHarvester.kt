@@ -16,8 +16,8 @@ import no.fdk.harvester.rdf.CV
 import no.fdk.harvester.rdf.DCATNO
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
+import no.fdk.harvester.rdf.createCatalogRecordModel
 import no.fdk.harvester.rdf.createRDFResponse
-import no.fdk.harvester.rdf.createServiceCatalogRecordModel
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.query.QueryExecutionFactory
@@ -201,13 +201,19 @@ class ServiceHarvester(
                         val catalogFdkUri = serviceUriToCatalogFdkUri[it.resourceURI]
 
                         val catalogRecordModel =
-                            createServiceCatalogRecordModel(
-                                serviceUri = meta.uri,
-                                serviceFdkId = meta.fdkId,
-                                catalogFdkUri = catalogFdkUri,
+                            createCatalogRecordModel(
+                                resourceUri = meta.uri,
+                                fdkId = meta.fdkId,
+                                parentFdkUri = catalogFdkUri,
                                 issued = meta.issued,
                                 modified = meta.modified,
-                                serviceUriBase = applicationProperties.serviceUri,
+                                fdkUriBase = applicationProperties.serviceUri,
+                                missingParentLogMessage =
+                                    if (catalogFdkUri == null) {
+                                        "The service ${meta.uri} is missing associated catalog uri"
+                                    } else {
+                                        null
+                                    },
                             )
                         val graphWithRecords = it.harvested.union(catalogRecordModel)
                         val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)

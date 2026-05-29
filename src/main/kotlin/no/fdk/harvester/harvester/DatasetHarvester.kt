@@ -11,7 +11,7 @@ import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.DCAT3
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
-import no.fdk.harvester.rdf.createDatasetCatalogRecordModel
+import no.fdk.harvester.rdf.createCatalogRecordModel
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
@@ -105,13 +105,13 @@ class DatasetHarvester(
                         result?.let { datasetMeta ->
                             updatedDatasets.add(datasetMeta)
                             val catalogRecordModel =
-                                createDatasetCatalogRecordModel(
-                                    datasetUri = datasetMeta.uri,
-                                    datasetFdkId = datasetMeta.fdkId,
-                                    catalogFdkUri = catalogFdkUri,
+                                createCatalogRecordModel(
+                                    resourceUri = datasetMeta.uri,
+                                    fdkId = datasetMeta.fdkId,
+                                    parentFdkUri = catalogFdkUri,
                                     issued = datasetMeta.issued,
                                     modified = datasetMeta.modified,
-                                    datasetUriBase = applicationProperties.datasetUri,
+                                    fdkUriBase = applicationProperties.datasetUri,
                                 )
                             val graphWithRecords = dataset.harvestedDataset.union(catalogRecordModel)
                             val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)

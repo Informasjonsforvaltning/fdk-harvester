@@ -10,7 +10,7 @@ import no.fdk.harvester.model.HarvestSourceEntity
 import no.fdk.harvester.model.ResourceEntity
 import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.computeChecksum
-import no.fdk.harvester.rdf.createConceptCatalogRecordModel
+import no.fdk.harvester.rdf.createCatalogRecordModel
 import no.fdk.harvester.rdf.createIdFromString
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
@@ -116,13 +116,19 @@ class ConceptHarvester(
                     ?.let { meta ->
                         val graphWithRecords =
                             it.harvested.union(
-                                createConceptCatalogRecordModel(
-                                    conceptUri = it.resourceURI,
-                                    conceptFdkId = meta.fdkId,
-                                    collectionFdkUri = conceptUriToCollectionFdkUri[it.resourceURI],
+                                createCatalogRecordModel(
+                                    resourceUri = it.resourceURI,
+                                    fdkId = meta.fdkId,
+                                    parentFdkUri = conceptUriToCollectionFdkUri[it.resourceURI],
                                     issued = meta.issued,
                                     modified = meta.modified,
-                                    conceptUriBase = conceptUriBase,
+                                    fdkUriBase = conceptUriBase,
+                                    missingParentLogMessage =
+                                        if (conceptUriToCollectionFdkUri[it.resourceURI] == null) {
+                                            "The concept ${it.resourceURI} is missing associated collection uri"
+                                        } else {
+                                            null
+                                        },
                                 ),
                             )
                         val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)

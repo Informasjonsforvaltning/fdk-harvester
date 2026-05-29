@@ -14,7 +14,7 @@ import no.fdk.harvester.rdf.CV
 import no.fdk.harvester.rdf.DCATNO
 import no.fdk.harvester.rdf.computeChecksum
 import no.fdk.harvester.rdf.containsTriple
-import no.fdk.harvester.rdf.createEventCatalogRecordModel
+import no.fdk.harvester.rdf.createCatalogRecordModel
 import no.fdk.harvester.rdf.createRDFResponse
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
@@ -199,13 +199,19 @@ class EventHarvester(
                         val catalogFdkUri = eventUriToCatalogFdkUri[it.eventURI]
 
                         val catalogRecordModel =
-                            createEventCatalogRecordModel(
-                                eventUri = meta.uri,
-                                eventFdkId = meta.fdkId,
-                                catalogFdkUri = catalogFdkUri,
+                            createCatalogRecordModel(
+                                resourceUri = meta.uri,
+                                fdkId = meta.fdkId,
+                                parentFdkUri = catalogFdkUri,
                                 issued = meta.issued,
                                 modified = meta.modified,
-                                eventUriBase = applicationProperties.eventUri,
+                                fdkUriBase = applicationProperties.eventUri,
+                                missingParentLogMessage =
+                                    if (catalogFdkUri == null) {
+                                        "The event ${meta.uri} is missing associated catalog uri"
+                                    } else {
+                                        null
+                                    },
                             )
                         val graphWithRecords = it.harvested.union(catalogRecordModel)
                         val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
