@@ -87,17 +87,15 @@ class ConceptHarvester(
             )
         }
 
-        return HarvestReport(
-            runId = runId,
-            dataSourceId = sourceId,
-            dataSourceUrl = sourceURL,
-            dataType = "concept",
-            harvestError = false,
-            startTime = harvestDate.formatWithOsloTimeZone(),
-            endTime = formatNowWithOsloTimeZone(),
+        return HarvestReportBuilder.createSuccessReport(
+            dataType = dataType,
+            sourceId = sourceId,
+            sourceUrl = sourceURL,
+            harvestDate = harvestDate,
             changedCatalogs = updatedCollections,
             changedResources = updatedConcepts,
             removedResources = removedConcepts.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
+            runId = runId,
         )
     }
 
@@ -114,7 +112,7 @@ class ConceptHarvester(
         val updatedConcepts =
             concepts.mapNotNull {
                 it
-                    .updateDBOs(harvestDate, forceUpdate, harvestSource)
+                    .upsertResource(harvestDate, forceUpdate, harvestSource)
                     ?.let { meta ->
                         val graphWithRecords =
                             it.harvested.union(
@@ -145,7 +143,7 @@ class ConceptHarvester(
         return updatedConcepts
     }
 
-    private fun ConceptRDFModel.updateDBOs(
+    private fun ConceptRDFModel.upsertResource(
         harvestDate: Calendar,
         forceUpdate: Boolean,
         harvestSource: HarvestSourceEntity,
@@ -198,7 +196,6 @@ class ConceptHarvester(
                 conceptUriToCollectionFdkUri.putIfAbsent(conceptURI, collectionFdkUri)
             }
         }
-        // Validate source ownership for all collections before filtering by change
         collections.forEach { coll ->
             validateSourceUrl(coll.resourceURI, harvestSource, resourceRepository.findByIdOrNull(coll.resourceURI))
         }

@@ -42,25 +42,12 @@ fun jenaTypeFromAcceptHeader(accept: String?): Lang? {
     }
 }
 
-fun parseRDFResponse(
-    responseBody: String,
-    rdfLanguage: Lang,
-): Model {
-    val responseModel = ModelFactory.createDefaultModel()
-    responseModel.read(StringReader(responseBody), BACKUP_BASE_URI, rdfLanguage.name)
-
-    // test that the model is valid as RDF/XML, will throw exception if not
-    responseModel.createRDFResponse(Lang.RDFXML)
-
-    return responseModel
-}
-
 fun safeParseRDF(
     rdf: String,
     lang: Lang,
 ): Model =
     try {
-        parseRDFResponse(rdf, lang)
+        parseRDF(rdf, lang)
     } catch (ex: Exception) {
         logger.warn("parse failure", ex)
         ModelFactory.createDefaultModel()

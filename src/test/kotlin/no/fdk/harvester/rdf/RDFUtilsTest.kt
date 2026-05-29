@@ -89,7 +89,7 @@ class RDFUtilsTest {
     }
 
     @Test
-    fun `test parseRDFResponse with valid turtle`() {
+    fun `test parseRDF with valid turtle`() {
         val turtle =
             """
             @prefix dcat: <http://www.w3.org/ns/dcat#> .
@@ -98,7 +98,7 @@ class RDFUtilsTest {
             <http://example.org/dataset> a dcat:Dataset .
             """.trimIndent()
 
-        val model = parseRDFResponse(turtle, Lang.TURTLE)
+        val model = parseRDF(turtle, Lang.TURTLE)
         assertNotNull(model)
         assertFalse(model.isEmpty)
     }

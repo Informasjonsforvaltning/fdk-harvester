@@ -32,18 +32,11 @@ import java.util.Calendar
 private val LOGGER = LoggerFactory.getLogger(Application::class.java)
 private const val DATE_FORMAT: String = "yyyy-MM-dd HH:mm:ss Z"
 
-fun CollectionRDFModel.harvestDiff(dboNoRecords: String?): Boolean =
+fun Model.harvestDiff(dboNoRecords: String?): Boolean =
     if (dboNoRecords == null) {
         true
     } else {
-        !harvested.isIsomorphicWith(safeParseRDF(dboNoRecords, Lang.TURTLE))
-    }
-
-fun ConceptRDFModel.harvestDiff(dboNoRecords: String?): Boolean =
-    if (dboNoRecords == null) {
-        true
-    } else {
-        !harvested.isIsomorphicWith(safeParseRDF(dboNoRecords, Lang.TURTLE))
+        !isIsomorphicWith(safeParseRDF(dboNoRecords, Lang.TURTLE))
     }
 
 internal fun Model.recursiveBlankNodeSkolem(baseURI: String): Model {
@@ -89,14 +82,14 @@ fun splitCollectionsFromRDF(
         harvested
             .listResourcesWithProperty(RDF.type, SKOS.Collection)
             .toList()
-            .excludeBlankNodeCollectionsAndConcepts(sourceURL)
+            .excludeBlankNodes(sourceURL)
             .map { collectionResource ->
                 val collectionConcepts: Set<String> =
                     collectionResource
                         .listProperties(SKOS.member)
                         .toList()
                         .map { it.resource }
-                        .excludeBlankNodeCollectionsAndConcepts(sourceURL)
+                        .excludeBlankNodes(sourceURL)
                         .map { it.uri }
                         .toSet()
 
@@ -127,7 +120,7 @@ fun splitCollectionsFromRDF(
     )
 }
 
-private fun List<Resource>.excludeBlankNodeCollectionsAndConcepts(sourceURL: String): List<Resource> =
+private fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> =
     filter {
         if (it.isURIResource) {
             true
@@ -147,7 +140,7 @@ fun splitConceptsFromRDF(
     harvested
         .listResourcesWithProperty(RDF.type, SKOS.Concept)
         .toList()
-        .excludeBlankNodeCollectionsAndConcepts(sourceURL)
+        .excludeBlankNodes(sourceURL)
         .map { conceptResource -> conceptResource.extractConcept() }
 
 fun Resource.extractCollectionModel(): Model {

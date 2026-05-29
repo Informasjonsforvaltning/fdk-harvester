@@ -68,7 +68,7 @@ class EventHarvester(
                 null
             }
 
-        val catalogs = splitCatalogsFromRDF(harvested, allEvents, sourceUrl, organization)
+        val catalogs = extractCatalogs(harvested, allEvents, sourceUrl, organization)
         val (updatedCatalogs, eventUriToCatalogFdkUri) =
             updateCatalogs(
                 catalogs,
@@ -85,7 +85,6 @@ class EventHarvester(
                 eventUriToCatalogFdkUri,
             )
 
-        // Mark events as removed if they were harvested from this source but are no longer present
         val eventsFromThisSource =
             resourceRepository
                 .findAllByType(ResourceType.EVENT)
@@ -98,17 +97,15 @@ class EventHarvester(
             .run { resourceRepository.saveAll(this) }
 
         val report =
-            HarvestReport(
-                runId = runId,
-                dataSourceId = sourceId,
-                dataSourceUrl = sourceUrl,
-                dataType = "event",
-                harvestError = false,
-                startTime = harvestDate.formatWithOsloTimeZone(),
-                endTime = formatNowWithOsloTimeZone(),
+            HarvestReportBuilder.createSuccessReport(
+                dataType = dataType,
+                sourceId = sourceId,
+                sourceUrl = sourceUrl,
+                harvestDate = harvestDate,
                 changedCatalogs = updatedCatalogs,
                 changedResources = updatedEvents,
                 removedResources = removedEvents.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
+                runId = runId,
             )
 
         if (updatedEvents.isNotEmpty()) {
@@ -138,7 +135,6 @@ class EventHarvester(
         harvestSource: HarvestSourceEntity,
     ): Pair<List<FdkIdAndUri>, Map<String, String>> {
         val eventUriToCatalogFdkUri = mutableMapOf<String, String>()
-        // Validate source ownership for all catalogs before filtering by change
         catalogs.forEach { catalog ->
             validateSourceUrl(
                 catalog.resourceURI,
@@ -198,7 +194,7 @@ class EventHarvester(
         val updatedEvents =
             events.mapNotNull {
                 it
-                    .updateDBOs(harvestDate, forceUpdate, harvestSource)
+                    .upsertResource(harvestDate, forceUpdate, harvestSource)
                     ?.let { meta ->
                         val catalogFdkUri = eventUriToCatalogFdkUri[it.eventURI]
 
@@ -220,7 +216,7 @@ class EventHarvester(
         return Pair(updatedEvents, resourceGraphs)
     }
 
-    private fun EventRDFModel.updateDBOs(
+    private fun EventRDFModel.upsertResource(
         harvestDate: Calendar,
         forceUpdate: Boolean,
         harvestSource: HarvestSourceEntity,
@@ -257,14 +253,6 @@ class EventHarvester(
         }
     }
 
-    private fun getEventsRemovedThisHarvest(
-        events: List<String>,
-        harvestSource: HarvestSourceEntity,
-    ): List<ResourceEntity> =
-        resourceRepository
-            .findAllByType(ResourceType.EVENT)
-            .filter { it.harvestSource.id == harvestSource.id && !it.removed && !events.contains(it.uri) }
-
     private fun splitEventsFromRDF(
         harvested: Model,
         sourceURL: String,
@@ -272,10 +260,10 @@ class EventHarvester(
         harvested
             .listResourcesWithEventType()
             .toList()
-            .filterBlankNodeEvents(sourceURL)
+            .excludeBlankNodes(sourceURL)
             .map { eventResource -> eventResource.extractEvent() }
 
-    private fun splitCatalogsFromRDF(
+    private fun extractCatalogs(
         harvested: Model,
         allEvents: List<EventRDFModel>,
         sourceURL: String,
@@ -285,7 +273,7 @@ class EventHarvester(
             harvested
                 .listResourcesWithProperty(RDF.type, DCAT.Catalog)
                 .toList()
-                .filterBlankNodeCatalogsAndEvents(sourceURL)
+                .excludeBlankNodes(sourceURL)
                 .map { catalogResource ->
                     val catalogEvents: Set<String> =
                         catalogResource
@@ -293,7 +281,7 @@ class EventHarvester(
                             .toList()
                             .filter { it.isResourceProperty() }
                             .map { it.resource }
-                            .filterBlankNodeCatalogsAndEvents(sourceURL)
+                            .excludeBlankNodes(sourceURL)
                             .map { it.uri }
                             .toSet()
 
@@ -331,22 +319,12 @@ class EventHarvester(
         return listOf(events, businessEvents, lifeEvents).flatten()
     }
 
-    private fun List<Resource>.filterBlankNodeEvents(sourceURL: String): List<Resource> =
+    private fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> =
         filter {
             if (it.isURIResource) {
                 true
             } else {
-                logger.warn("Blank node event filtered when harvesting $sourceURL")
-                false
-            }
-        }
-
-    private fun List<Resource>.filterBlankNodeCatalogsAndEvents(sourceURL: String): List<Resource> =
-        filter {
-            if (it.isURIResource) {
-                true
-            } else {
-                logger.warn("Blank node catalog or event filtered when harvesting $sourceURL")
+                logger.warn("Blank node resource filtered when harvesting $sourceURL")
                 false
             }
         }
@@ -481,7 +459,6 @@ class EventHarvester(
         return this
     }
 
-    // Data classes
     private data class CatalogAndEventModels(
         val resourceURI: String,
         val harvestedCatalog: Model,

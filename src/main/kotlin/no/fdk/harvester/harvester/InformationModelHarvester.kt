@@ -59,9 +59,8 @@ class InformationModelHarvester(
         val removedModels = mutableListOf<ResourceEntity>()
         val resourceGraphs = mutableMapOf<String, String>()
         val catalogPairs =
-            splitCatalogsFromRDF(harvested, sourceUrl)
+            extractCatalogs(harvested, sourceUrl)
                 .map { Pair(it, resourceRepository.findByIdOrNull(it.resourceURI)) }
-        // Validate source ownership for all catalogs before filtering by change
         catalogPairs.forEach { (catalog, _) ->
             validateSourceUrl(
                 catalog.resourceURI,
@@ -107,7 +106,7 @@ class InformationModelHarvester(
                             harvestSource,
                             resourceRepository.findByIdOrNull(infoModel.resourceURI),
                         )
-                        val result = infoModel.updateDBOs(harvestDate, forceUpdate, harvestSource)
+                        val result = infoModel.upsertResource(harvestDate, forceUpdate, harvestSource)
                         result?.let { modelMeta ->
                             updatedModels.add(modelMeta)
                             val catalogRecordModel =
@@ -133,7 +132,6 @@ class InformationModelHarvester(
                 }
             }
 
-        // Mark models as removed if they were harvested from this source but are no longer present
         val modelsFromThisSource =
             resourceRepository
                 .findAllByType(ResourceType.INFORMATIONMODEL)
@@ -177,7 +175,7 @@ class InformationModelHarvester(
         return report
     }
 
-    private fun InformationModelRDFModel.updateDBOs(
+    private fun InformationModelRDFModel.upsertResource(
         harvestDate: Calendar,
         forceUpdate: Boolean,
         harvestSource: HarvestSourceEntity,
@@ -208,21 +206,21 @@ class InformationModelHarvester(
         }
     }
 
-    private fun splitCatalogsFromRDF(
+    private fun extractCatalogs(
         harvested: Model,
         sourceURL: String,
     ): List<CatalogAndInfoModels> =
         harvested
             .listResourcesWithProperty(RDF.type, DCAT.Catalog)
             .toList()
-            .filterBlankNodeCatalogsAndModels(sourceURL)
+            .excludeBlankNodes(sourceURL)
             .map { catalogResource ->
                 val catalogInfoModels: List<InformationModelRDFModel> =
                     catalogResource
                         .listProperties(ModellDCATAPNO.model)
                         .toList()
                         .map { it.resource }
-                        .filterBlankNodeCatalogsAndModels(sourceURL)
+                        .excludeBlankNodes(sourceURL)
                         .filter { catalogContainsInfoModel(harvested, catalogResource.uri, it.uri) }
                         .map { infoModel -> infoModel.extractInformationModel() }
 
@@ -251,7 +249,7 @@ class InformationModelHarvester(
         return catalogModelWithoutServices
     }
 
-    private fun List<Resource>.filterBlankNodeCatalogsAndModels(sourceURL: String): List<Resource> =
+    private fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> =
         filter {
             if (it.isURIResource) {
                 true

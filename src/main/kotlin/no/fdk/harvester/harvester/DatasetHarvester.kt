@@ -60,7 +60,6 @@ class DatasetHarvester(
         val catalogPairs =
             extractCatalogs(harvested, sourceUrl)
                 .map { Pair(it, resourceRepository.findByIdOrNull(it.resource.uri)) }
-        // Validate source ownership for all catalogs in the feed before filtering by change
         catalogPairs.forEach { (catalog, dbCatalog) ->
             validateSourceUrl(catalog.resource.uri, harvestSource, dbCatalog)
         }
@@ -102,7 +101,7 @@ class DatasetHarvester(
                             harvestSource,
                             resourceRepository.findByIdOrNull(dataset.resource.uri),
                         )
-                        val result = dataset.updateDataset(harvestDate, forceUpdate, harvestSource)
+                        val result = dataset.upsertResource(harvestDate, forceUpdate, harvestSource)
                         result?.let { datasetMeta ->
                             updatedDatasets.add(datasetMeta)
                             val catalogRecordModel =
@@ -124,7 +123,6 @@ class DatasetHarvester(
                 }
             }
 
-        // Mark datasets as removed if they were harvested from this source but are no longer present
         val datasetsFromThisSource =
             resourceRepository
                 .findAllByType(ResourceType.DATASET)
@@ -168,7 +166,7 @@ class DatasetHarvester(
         return report
     }
 
-    private fun DatasetModel.updateDataset(
+    private fun DatasetModel.upsertResource(
         harvestDate: Calendar,
         forceUpdate: Boolean,
         harvestSource: HarvestSourceEntity,
@@ -206,7 +204,7 @@ class DatasetHarvester(
         harvested
             .listResourcesWithProperty(RDF.type, DCAT.Catalog)
             .toList()
-            .filterBlankNodeCatalogsAndDatasets(sourceURL)
+            .excludeBlankNodes(sourceURL)
             .map { catalogResource ->
                 val catalogDatasets: List<DatasetModel> =
                     catalogResource
@@ -216,7 +214,7 @@ class DatasetHarvester(
                         .map { it.resource }
                         .flatMap { it.extractDatasetsInSeries() }
                         .filter { it.isDataset() }
-                        .filterBlankNodeCatalogsAndDatasets(sourceURL)
+                        .excludeBlankNodes(sourceURL)
                         .map { it.extractDataset() }
 
                 val catalogModelWithoutDatasets = catalogResource.extractCatalogModel()
@@ -243,7 +241,7 @@ class DatasetHarvester(
         return catalogModelWithoutServices
     }
 
-    private fun List<Resource>.filterBlankNodeCatalogsAndDatasets(sourceURL: String): List<Resource> =
+    private fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> =
         filter {
             if (it.isURIResource) {
                 true
@@ -348,7 +346,6 @@ class DatasetHarvester(
         }
     }
 
-    // Data classes from DatasetHarvestHelpers
     private data class CatalogAndDatasetModels(
         val resource: Resource,
         val harvestedCatalog: Model,
