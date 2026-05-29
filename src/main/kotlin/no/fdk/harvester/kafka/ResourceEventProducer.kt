@@ -27,14 +27,25 @@ import org.springframework.stereotype.Service
 @Service
 class ResourceEventProducer(
     private val kafkaTemplate: KafkaTemplate<String, SpecificRecord>,
-    @param:Value("\${app.kafka.topic.dataset-events:dataset-events}") private val datasetEventsTopic: String,
-    @param:Value("\${app.kafka.topic.concept-events:concept-events}") private val conceptEventsTopic: String,
-    @param:Value("\${app.kafka.topic.dataservice-events:dataservice-events}") private val dataServiceEventsTopic: String,
-    @param:Value("\${app.kafka.topic.informationmodel-events:informationmodel-events}") private val informationModelEventsTopic: String,
-    @param:Value("\${app.kafka.topic.service-events:service-events}") private val serviceEventsTopic: String,
-    @param:Value("\${app.kafka.topic.event-events:event-events}") private val eventEventsTopic: String,
+    @param:Value("\${app.kafka.topic.dataset-events:dataset-events}") datasetEventsTopic: String,
+    @param:Value("\${app.kafka.topic.concept-events:concept-events}") conceptEventsTopic: String,
+    @param:Value("\${app.kafka.topic.dataservice-events:dataservice-events}") dataServiceEventsTopic: String,
+    @param:Value("\${app.kafka.topic.informationmodel-events:informationmodel-events}") informationModelEventsTopic: String,
+    @param:Value("\${app.kafka.topic.service-events:service-events}") serviceEventsTopic: String,
+    @param:Value("\${app.kafka.topic.event-events:event-events}") eventEventsTopic: String,
 ) {
     private val logger = LoggerFactory.getLogger(ResourceEventProducer::class.java)
+
+    private val topicByDataType: Map<DataType, String> =
+        mapOf(
+            DataType.dataset to datasetEventsTopic,
+            DataType.concept to conceptEventsTopic,
+            DataType.dataservice to dataServiceEventsTopic,
+            DataType.informationmodel to informationModelEventsTopic,
+            DataType.service to serviceEventsTopic,
+            DataType.publicService to serviceEventsTopic,
+            DataType.event to eventEventsTopic,
+        )
 
     fun publishHarvestedEvents(
         dataType: DataType,
@@ -42,36 +53,7 @@ class ResourceEventProducer(
         resourceGraphs: Map<String, String>,
         runId: String,
     ) {
-        val topicName = getTopicForDataType(dataType)
-        if (topicName == null) {
-            logger.warn("No topic configured for dataType: $dataType")
-            return
-        }
-
-        resources.forEach { resource ->
-            try {
-                val graph = resourceGraphs[resource.fdkId] ?: ""
-                val event = createHarvestedEvent(dataType, resource, runId, graph)
-
-                if (event != null) {
-                    kafkaTemplate.send(topicName, resource.fdkId, event)
-                    logProducedResourceEvent(
-                        topicName,
-                        resource.fdkId,
-                        "${dataType.name.uppercase()}_HARVESTED",
-                        resource.fdkId,
-                        resource.uri,
-                        runId,
-                        graph,
-                    )
-                }
-            } catch (e: Exception) {
-                logger.error(
-                    "Failed to produce ${dataType.name.uppercase()}_HARVESTED event for fdkId: ${resource.fdkId}, runId: $runId",
-                    e,
-                )
-            }
-        }
+        publishEvents(dataType, resources, runId, ResourceEventKind.HARVESTED, resourceGraphs)
     }
 
     fun publishRemovedEvents(
@@ -79,47 +61,68 @@ class ResourceEventProducer(
         resources: List<FdkIdAndUri>,
         runId: String,
     ) {
-        val topicName = getTopicForDataType(dataType)
-        if (topicName == null) {
-            logger.warn("No topic configured for dataType: $dataType")
-            return
-        }
+        publishEvents(dataType, resources, runId, ResourceEventKind.REMOVED)
+    }
+
+    private fun publishEvents(
+        dataType: DataType,
+        resources: List<FdkIdAndUri>,
+        runId: String,
+        kind: ResourceEventKind,
+        resourceGraphs: Map<String, String> = emptyMap(),
+    ) {
+        val topicName =
+            topicByDataType[dataType] ?: run {
+                logger.warn("No topic configured for dataType: $dataType")
+                return
+            }
 
         resources.forEach { resource ->
             try {
-                val event = createRemovedEvent(dataType, resource, runId)
-
-                if (event != null) {
-                    kafkaTemplate.send(topicName, resource.fdkId, event)
-                    logProducedResourceEvent(
-                        topicName,
-                        resource.fdkId,
-                        "${dataType.name.uppercase()}_REMOVED",
-                        resource.fdkId,
-                        resource.uri,
-                        runId,
-                        "",
-                    )
-                }
+                val graph =
+                    when (kind) {
+                        ResourceEventKind.HARVESTED -> resourceGraphs[resource.fdkId] ?: ""
+                        ResourceEventKind.REMOVED -> ""
+                    }
+                val event = buildEvent(dataType, resource, runId, graph, kind)
+                kafkaTemplate.send(topicName, resource.fdkId, event)
+                logProducedResourceEvent(
+                    topic = topicName,
+                    key = resource.fdkId,
+                    eventType = "${dataType.name.uppercase()}_${kind.name}",
+                    fdkId = resource.fdkId,
+                    uri = resource.uri,
+                    runId = runId,
+                    graph = graph,
+                )
             } catch (e: Exception) {
-                logger.error("Failed to produce ${dataType.name.uppercase()}_REMOVED event for fdkId: ${resource.fdkId}, runId: $runId", e)
+                logger.error(
+                    "Failed to produce ${dataType.name.uppercase()}_${kind.name} event for fdkId: ${resource.fdkId}, runId: $runId",
+                    e,
+                )
             }
         }
     }
 
-    private fun createHarvestedEvent(
+    private fun buildEvent(
         dataType: DataType,
         resource: FdkIdAndUri,
         runId: String,
         graph: String,
-    ): SpecificRecord? {
+        kind: ResourceEventKind,
+    ): SpecificRecord {
         val timestamp = System.currentTimeMillis()
 
         return when (dataType) {
             DataType.dataset -> {
+                val eventType =
+                    when (kind) {
+                        ResourceEventKind.HARVESTED -> DatasetEventType.DATASET_HARVESTED
+                        ResourceEventKind.REMOVED -> DatasetEventType.DATASET_REMOVED
+                    }
                 DatasetEvent
                     .newBuilder()
-                    .setType(DatasetEventType.DATASET_HARVESTED)
+                    .setType(eventType)
                     .setHarvestRunId(runId)
                     .setUri(resource.uri)
                     .setFdkId(resource.fdkId)
@@ -129,135 +132,48 @@ class ResourceEventProducer(
             }
 
             DataType.concept -> {
-                ConceptEvent(
-                    ConceptEventType.CONCEPT_HARVESTED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    graph,
-                    timestamp,
-                )
+                val eventType =
+                    when (kind) {
+                        ResourceEventKind.HARVESTED -> ConceptEventType.CONCEPT_HARVESTED
+                        ResourceEventKind.REMOVED -> ConceptEventType.CONCEPT_REMOVED
+                    }
+                ConceptEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
             }
 
             DataType.dataservice -> {
-                DataServiceEvent(
-                    DataServiceEventType.DATA_SERVICE_HARVESTED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    graph,
-                    timestamp,
-                )
+                val eventType =
+                    when (kind) {
+                        ResourceEventKind.HARVESTED -> DataServiceEventType.DATA_SERVICE_HARVESTED
+                        ResourceEventKind.REMOVED -> DataServiceEventType.DATA_SERVICE_REMOVED
+                    }
+                DataServiceEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
             }
 
             DataType.informationmodel -> {
-                InformationModelEvent(
-                    InformationModelEventType.INFORMATION_MODEL_HARVESTED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    graph,
-                    timestamp,
-                )
+                val eventType =
+                    when (kind) {
+                        ResourceEventKind.HARVESTED -> InformationModelEventType.INFORMATION_MODEL_HARVESTED
+                        ResourceEventKind.REMOVED -> InformationModelEventType.INFORMATION_MODEL_REMOVED
+                    }
+                InformationModelEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
             }
 
             DataType.service, DataType.publicService -> {
-                ServiceEvent(
-                    ServiceEventType.SERVICE_HARVESTED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    graph,
-                    timestamp,
-                )
+                val eventType =
+                    when (kind) {
+                        ResourceEventKind.HARVESTED -> ServiceEventType.SERVICE_HARVESTED
+                        ResourceEventKind.REMOVED -> ServiceEventType.SERVICE_REMOVED
+                    }
+                ServiceEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
             }
 
             DataType.event -> {
-                EventEvent(
-                    EventEventType.EVENT_HARVESTED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    graph,
-                    timestamp,
-                )
-            }
-        }
-    }
-
-    private fun createRemovedEvent(
-        dataType: DataType,
-        resource: FdkIdAndUri,
-        runId: String,
-    ): SpecificRecord? {
-        val timestamp = System.currentTimeMillis()
-
-        return when (dataType) {
-            DataType.dataset -> {
-                DatasetEvent
-                    .newBuilder()
-                    .setType(DatasetEventType.DATASET_REMOVED)
-                    .setHarvestRunId(runId)
-                    .setUri(resource.uri)
-                    .setFdkId(resource.fdkId)
-                    .setGraph("")
-                    .setTimestamp(timestamp)
-                    .build()
-            }
-
-            DataType.concept -> {
-                ConceptEvent(
-                    ConceptEventType.CONCEPT_REMOVED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    "",
-                    timestamp,
-                )
-            }
-
-            DataType.dataservice -> {
-                DataServiceEvent(
-                    DataServiceEventType.DATA_SERVICE_REMOVED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    "",
-                    timestamp,
-                )
-            }
-
-            DataType.informationmodel -> {
-                InformationModelEvent(
-                    InformationModelEventType.INFORMATION_MODEL_REMOVED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    "",
-                    timestamp,
-                )
-            }
-
-            DataType.service, DataType.publicService -> {
-                ServiceEvent(
-                    ServiceEventType.SERVICE_REMOVED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    "",
-                    timestamp,
-                )
-            }
-
-            DataType.event -> {
-                EventEvent(
-                    EventEventType.EVENT_REMOVED,
-                    runId,
-                    resource.uri,
-                    resource.fdkId,
-                    "",
-                    timestamp,
-                )
+                val eventType =
+                    when (kind) {
+                        ResourceEventKind.HARVESTED -> EventEventType.EVENT_HARVESTED
+                        ResourceEventKind.REMOVED -> EventEventType.EVENT_REMOVED
+                    }
+                EventEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
             }
         }
     }
@@ -277,13 +193,8 @@ class ResourceEventProducer(
         )
     }
 
-    private fun getTopicForDataType(dataType: DataType): String? =
-        when (dataType) {
-            DataType.dataset -> datasetEventsTopic
-            DataType.concept -> conceptEventsTopic
-            DataType.dataservice -> dataServiceEventsTopic
-            DataType.informationmodel -> informationModelEventsTopic
-            DataType.service, DataType.publicService -> serviceEventsTopic
-            DataType.event -> eventEventsTopic
-        }
+    private enum class ResourceEventKind {
+        HARVESTED,
+        REMOVED,
+    }
 }
