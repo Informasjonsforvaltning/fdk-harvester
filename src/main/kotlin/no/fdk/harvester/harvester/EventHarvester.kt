@@ -13,6 +13,7 @@ import no.fdk.harvester.rdf.DCATNO
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
+import org.apache.jena.rdf.model.Property
 import org.apache.jena.rdf.model.RDFNode
 import org.apache.jena.rdf.model.Resource
 import org.apache.jena.vocabulary.DCAT
@@ -58,6 +59,8 @@ class EventHarvester(
 
     override fun containerRdfType(): Resource = DCAT.Catalog
 
+    override fun memberLinkProperty(): Property = DCATNO.containsEvent
+
     override fun listMembers(
         harvested: Model,
         sourceURL: String,
@@ -65,7 +68,7 @@ class EventHarvester(
         harvested
             .listResourcesWithEventType()
             .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(DCATNO.containsEvent) }
+            .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
@@ -78,11 +81,6 @@ class EventHarvester(
             members = members,
             sourceURL = sourceURL,
             organization = organization,
-            memberLinkProperty = DCATNO.containsEvent,
-            addMembersToGeneratedContainer = { memberUris ->
-                memberUris.forEach { addProperty(DCATNO.containsEvent, model.createResource(it)) }
-                this
-            },
         )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean =

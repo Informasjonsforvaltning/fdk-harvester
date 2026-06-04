@@ -135,6 +135,7 @@ abstract class ResourceHarvester(
                 resources = updatedMembers,
                 resourceGraphs = resourceGraphs,
                 runId = runId,
+                catalogGraphs = catalogGraphforUpdatedMember(updatedMembers, containers),
             )
         }
 
@@ -290,11 +291,9 @@ abstract class ResourceHarvester(
         members: List<MemberRDFModel>,
         sourceURL: String,
         organization: Organization?,
-        memberLinkProperty: Property,
-        addMembersToGeneratedContainer: Resource.(Set<String>) -> Resource,
         resolveContainerMemberUris: (containerResource: Resource) -> Set<String> = { containerResource ->
             containerResource
-                .listProperties(memberLinkProperty)
+                .listProperties(memberLinkProperty())
                 .toList()
                 .filter { it.isResourceProperty() }
                 .map { it.resource }
@@ -313,7 +312,7 @@ abstract class ResourceHarvester(
 
                     val containerModelWithoutMembers =
                         containerResource
-                            .extractContainerModel(memberLinkProperty)
+                            .extractContainerModel(memberLinkProperty())
                             .recursiveBlankNodeSkolem(containerResource.uri)
 
                     val containerModel = ModelFactory.createDefaultModel()
@@ -334,7 +333,6 @@ abstract class ResourceHarvester(
                 orphanMembers = members.filterNot { it.isMemberOfAnyContainer },
                 sourceURL = sourceURL,
                 organization = organization,
-                addMembersToGeneratedContainer = addMembersToGeneratedContainer,
             ),
         )
     }
@@ -343,7 +341,6 @@ abstract class ResourceHarvester(
         orphanMembers: List<MemberRDFModel>,
         sourceURL: String,
         organization: Organization?,
-        addMembersToGeneratedContainer: Resource.(Set<String>) -> Resource,
     ): ContainerRDFModel {
         val memberUris = orphanMembers.map { it.resourceURI }.toSet()
         val generatedContainerURI = "$sourceURL${harvestConfig.generatedContainerUriSuffix}"
@@ -352,7 +349,6 @@ abstract class ResourceHarvester(
                 containerURI = generatedContainerURI,
                 memberUris = memberUris,
                 organization = organization,
-                addMembersToGeneratedContainer = addMembersToGeneratedContainer,
             )
 
         val catalogModel = ModelFactory.createDefaultModel()
@@ -370,7 +366,6 @@ abstract class ResourceHarvester(
         containerURI: String,
         memberUris: Set<String>,
         organization: Organization?,
-        addMembersToGeneratedContainer: Resource.(Set<String>) -> Resource,
     ): Model {
         val catalogModel = ModelFactory.createDefaultModel()
         catalogModel
@@ -381,7 +376,7 @@ abstract class ResourceHarvester(
                 organization,
                 harvestConfig.generatedCatalogNbLabel,
                 harvestConfig.generatedCatalogEnLabel,
-            ).addMembersToGeneratedContainer(memberUris)
+            ).addMembersToContainer(memberUris)
         return catalogModel
     }
 
@@ -444,6 +439,26 @@ abstract class ResourceHarvester(
         return this
     }
 
+    private fun catalogGraphforUpdatedMember(
+        updatedMembers: List<FdkIdAndUri>,
+        containers: List<ContainerRDFModel>,
+    ): Map<String, String> {
+        val catalogGraphs = mutableMapOf<String, String>()
+
+        updatedMembers.forEach { member ->
+            val container = containers.firstOrNull { it.memberURIs.contains(member.uri) }
+            val model = ModelFactory.createDefaultModel()
+            if (container != null) {
+                model.add(container.harvestedWithoutMembers)
+                model.getResource(container.resourceURI).addMembersToContainer(setOf(member.uri))
+            }
+
+            catalogGraphs[member.fdkId] = model.createRDFResponse(Lang.TURTLE)
+        }
+
+        return catalogGraphs
+    }
+
     /**
      * Whether [resource] should be added to this (the target) model. A resource is added unless it is
      * harvested as its own member ([isSeparatelyHarvestedMemberType]) or it is a URI resource already
@@ -484,5 +499,12 @@ abstract class ResourceHarvester(
         return QueryExecutionFactory.create(query, model).execAsk()
     }
 
+    private fun Resource.addMembersToContainer(memberUris: Set<String>): Resource {
+        memberUris.forEach { addProperty(memberLinkProperty(), model.createResource(it)) }
+        return this
+    }
+
     protected abstract fun containerRdfType(): Resource
+
+    protected abstract fun memberLinkProperty(): Property
 }

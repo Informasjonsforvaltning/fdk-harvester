@@ -60,6 +60,8 @@ class ServiceHarvester(
 
     override fun containerRdfType(): Resource = DCAT.Catalog
 
+    override fun memberLinkProperty(): Property = DCATNO.containsService
+
     override fun listMembers(
         harvested: Model,
         sourceURL: String,
@@ -67,7 +69,7 @@ class ServiceHarvester(
         harvested
             .listResourcesWithServiceType()
             .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(DCATNO.containsService) }
+            .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
@@ -80,11 +82,6 @@ class ServiceHarvester(
             members = members,
             sourceURL = sourceURL,
             organization = organization,
-            memberLinkProperty = DCATNO.containsService,
-            addMembersToGeneratedContainer = { memberUris ->
-                memberUris.forEach { addProperty(DCATNO.containsService, model.createResource(it)) }
-                this
-            },
         )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean =

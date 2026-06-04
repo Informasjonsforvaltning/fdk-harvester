@@ -137,6 +137,7 @@ abstract class BaseHarvester(
                         runId = runId,
                     )
                 }
+
                 Lang.RDFNULL -> {
                     logger.error(
                         "Not able to harvest from ${source.url}, header ${source.acceptHeaderValue} is not acceptable",
@@ -155,6 +156,7 @@ abstract class BaseHarvester(
                         runId = runId,
                     )
                 }
+
                 else -> {
                     val harvested = parseRDF(fetchContent(source), jenaWriterType)
                     updateIfChanged(harvested, source, harvestDate, forceUpdate, runId, dataType)

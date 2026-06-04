@@ -7,10 +7,12 @@ import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestReport
 import no.fdk.harvester.model.Organization
 import no.fdk.harvester.model.ResourceType
+import no.fdk.harvester.rdf.DCATNO
 import no.fdk.harvester.rdf.ModellDCATAPNO
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
+import org.apache.jena.rdf.model.Property
 import org.apache.jena.rdf.model.RDFNode
 import org.apache.jena.rdf.model.Resource
 import org.apache.jena.vocabulary.DCAT
@@ -57,6 +59,8 @@ class InformationModelHarvester(
 
     override fun containerRdfType(): Resource = DCAT.Catalog
 
+    override fun memberLinkProperty(): Property = ModellDCATAPNO.InformationModel
+
     override fun listMembers(
         harvested: Model,
         sourceURL: String,
@@ -65,7 +69,7 @@ class InformationModelHarvester(
             .listResourcesWithProperty(RDF.type, ModellDCATAPNO.InformationModel)
             .toList()
             .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(ModellDCATAPNO.model) }
+            .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
@@ -78,11 +82,6 @@ class InformationModelHarvester(
             members = members,
             sourceURL = sourceURL,
             organization = organization,
-            memberLinkProperty = ModellDCATAPNO.model,
-            addMembersToGeneratedContainer = { memberUris ->
-                memberUris.forEach { addProperty(ModellDCATAPNO.model, model.createResource(it)) }
-                this
-            },
         )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(ModellDCATAPNO.InformationModel)

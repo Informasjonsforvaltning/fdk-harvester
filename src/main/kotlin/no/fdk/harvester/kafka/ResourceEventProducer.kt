@@ -53,8 +53,9 @@ class ResourceEventProducer(
         resources: List<FdkIdAndUri>,
         resourceGraphs: Map<String, String>,
         runId: String,
+        catalogGraphs: Map<String, String>,
     ) {
-        publishEvents(dataType, resources, runId, ResourceEventKind.HARVESTED, resourceGraphs)
+        publishEvents(dataType, resources, runId, ResourceEventKind.HARVESTED, resourceGraphs, catalogGraphs)
     }
 
     fun publishRemovedEvents(
@@ -71,6 +72,7 @@ class ResourceEventProducer(
         runId: String,
         kind: ResourceEventKind,
         resourceGraphs: Map<String, String> = emptyMap(),
+        catalogGraphs: Map<String, String> = emptyMap(),
     ) {
         val topicName =
             topicByDataType[dataType] ?: run {
@@ -85,7 +87,12 @@ class ResourceEventProducer(
                         ResourceEventKind.HARVESTED -> resourceGraphs[resource.fdkId] ?: ""
                         ResourceEventKind.REMOVED -> ""
                     }
-                val event = buildEvent(dataType, resource, runId, graph, kind)
+                val catalogGraph =
+                    when (kind) {
+                        ResourceEventKind.HARVESTED -> catalogGraphs[resource.fdkId] ?: ""
+                        ResourceEventKind.REMOVED -> ""
+                    }
+                val event = buildEvent(dataType, resource, runId, graph, kind, catalogGraph)
                 kafkaTemplate.send(topicName, resource.fdkId, event)
                 logProducedResourceEvent(
                     topic = topicName,
@@ -111,6 +118,7 @@ class ResourceEventProducer(
         runId: String,
         graph: String,
         kind: ResourceEventKind,
+        catalogGraph: String,
     ): SpecificRecord {
         val timestamp = System.currentTimeMillis()
 
@@ -129,6 +137,7 @@ class ResourceEventProducer(
                     .setFdkId(resource.fdkId)
                     .setGraph(graph)
                     .setTimestamp(timestamp)
+                    .setCatalogGraph(catalogGraph)
                     .build()
             }
 
@@ -138,7 +147,16 @@ class ResourceEventProducer(
                         ResourceEventKind.HARVESTED -> ConceptEventType.CONCEPT_HARVESTED
                         ResourceEventKind.REMOVED -> ConceptEventType.CONCEPT_REMOVED
                     }
-                ConceptEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
+                ConceptEvent
+                    .newBuilder()
+                    .setType(eventType)
+                    .setHarvestRunId(runId)
+                    .setUri(resource.uri)
+                    .setFdkId(resource.fdkId)
+                    .setGraph(graph)
+                    .setTimestamp(timestamp)
+                    .setCatalogGraph(catalogGraph)
+                    .build()
             }
 
             DataType.dataservice -> {
@@ -147,7 +165,16 @@ class ResourceEventProducer(
                         ResourceEventKind.HARVESTED -> DataServiceEventType.DATA_SERVICE_HARVESTED
                         ResourceEventKind.REMOVED -> DataServiceEventType.DATA_SERVICE_REMOVED
                     }
-                DataServiceEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
+                DataServiceEvent
+                    .newBuilder()
+                    .setType(eventType)
+                    .setHarvestRunId(runId)
+                    .setUri(resource.uri)
+                    .setFdkId(resource.fdkId)
+                    .setGraph(graph)
+                    .setTimestamp(timestamp)
+                    .setCatalogGraph(catalogGraph)
+                    .build()
             }
 
             DataType.informationmodel -> {
@@ -156,7 +183,16 @@ class ResourceEventProducer(
                         ResourceEventKind.HARVESTED -> InformationModelEventType.INFORMATION_MODEL_HARVESTED
                         ResourceEventKind.REMOVED -> InformationModelEventType.INFORMATION_MODEL_REMOVED
                     }
-                InformationModelEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
+                InformationModelEvent
+                    .newBuilder()
+                    .setType(eventType)
+                    .setHarvestRunId(runId)
+                    .setUri(resource.uri)
+                    .setFdkId(resource.fdkId)
+                    .setGraph(graph)
+                    .setTimestamp(timestamp)
+                    .setCatalogGraph(catalogGraph)
+                    .build()
             }
 
             DataType.service, DataType.publicService -> {
@@ -165,7 +201,16 @@ class ResourceEventProducer(
                         ResourceEventKind.HARVESTED -> ServiceEventType.SERVICE_HARVESTED
                         ResourceEventKind.REMOVED -> ServiceEventType.SERVICE_REMOVED
                     }
-                ServiceEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
+                ServiceEvent
+                    .newBuilder()
+                    .setType(eventType)
+                    .setHarvestRunId(runId)
+                    .setUri(resource.uri)
+                    .setFdkId(resource.fdkId)
+                    .setGraph(graph)
+                    .setTimestamp(timestamp)
+                    .setCatalogGraph(catalogGraph)
+                    .build()
             }
 
             DataType.event -> {
@@ -174,7 +219,16 @@ class ResourceEventProducer(
                         ResourceEventKind.HARVESTED -> EventEventType.EVENT_HARVESTED
                         ResourceEventKind.REMOVED -> EventEventType.EVENT_REMOVED
                     }
-                EventEvent(eventType, runId, resource.uri, resource.fdkId, graph, timestamp)
+                EventEvent
+                    .newBuilder()
+                    .setType(eventType)
+                    .setHarvestRunId(runId)
+                    .setUri(resource.uri)
+                    .setFdkId(resource.fdkId)
+                    .setGraph(graph)
+                    .setTimestamp(timestamp)
+                    .setCatalogGraph(catalogGraph)
+                    .build()
             }
         }
     }

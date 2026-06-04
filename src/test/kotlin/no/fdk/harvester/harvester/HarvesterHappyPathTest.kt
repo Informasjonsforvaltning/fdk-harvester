@@ -81,6 +81,7 @@ class HarvesterHappyPathTest {
                     resources = any(),
                     resourceGraphs = capture(resourceGraphsSlot),
                     runId = any(),
+                    catalogGraphs = any(),
                 )
             }
             val graphs = resourceGraphsSlot.captured
@@ -289,6 +290,7 @@ class HarvesterHappyPathTest {
                     resources = any(),
                     resourceGraphs = capture(resourceGraphsSlot),
                     runId = any(),
+                    catalogGraphs = any(),
                 )
             }
 
@@ -534,6 +536,7 @@ class HarvesterHappyPathTest {
                     resources = any(),
                     resourceGraphs = capture(resourceGraphsSlot),
                     runId = any(),
+                    catalogGraphs = any(),
                 )
             }
 

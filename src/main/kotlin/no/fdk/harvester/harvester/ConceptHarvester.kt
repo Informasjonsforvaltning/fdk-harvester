@@ -10,6 +10,7 @@ import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
+import org.apache.jena.rdf.model.Property
 import org.apache.jena.rdf.model.RDFNode
 import org.apache.jena.rdf.model.Resource
 import org.apache.jena.vocabulary.RDF
@@ -56,6 +57,8 @@ class ConceptHarvester(
 
     override fun containerRdfType(): Resource = SKOS.Collection
 
+    override fun memberLinkProperty(): Property = SKOS.member
+
     override fun listMembers(
         harvested: Model,
         sourceURL: String,
@@ -64,7 +67,7 @@ class ConceptHarvester(
             .listResourcesWithProperty(RDF.type, SKOS.Concept)
             .toList()
             .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(SKOS.member) }
+            .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
@@ -77,11 +80,6 @@ class ConceptHarvester(
             members = members,
             sourceURL = sourceURL,
             organization = organization,
-            memberLinkProperty = SKOS.member,
-            addMembersToGeneratedContainer = { memberUris ->
-                memberUris.forEach { addProperty(SKOS.member, model.createResource(it)) }
-                this
-            },
         )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(SKOS.Concept)
