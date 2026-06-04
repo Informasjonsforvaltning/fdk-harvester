@@ -11,6 +11,7 @@ import no.fdk.harvester.rdf.DCAT3
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
+import org.apache.jena.rdf.model.Property
 import org.apache.jena.rdf.model.RDFNode
 import org.apache.jena.rdf.model.Resource
 import org.apache.jena.vocabulary.DCAT
@@ -56,6 +57,8 @@ class DatasetHarvester(
 
     override fun containerRdfType(): Resource = DCAT.Catalog
 
+    override fun memberLinkProperty(): Property = DCAT.dataset
+
     override fun listMembers(
         harvested: Model,
         sourceURL: String,
@@ -65,7 +68,7 @@ class DatasetHarvester(
         return (datasets + series)
             .distinct()
             .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(DCAT.dataset) }
+            .map { it.extractMember(memberLinkProperty()) }
     }
 
     override fun extractContainers(
@@ -79,14 +82,9 @@ class DatasetHarvester(
             members = members,
             sourceURL = sourceURL,
             organization = organization,
-            memberLinkProperty = DCAT.dataset,
-            addMembersToGeneratedContainer = { memberUris ->
-                memberUris.forEach { addProperty(DCAT.dataset, model.createResource(it)) }
-                this
-            },
             resolveContainerMemberUris = { containerResource ->
                 containerResource
-                    .listProperties(DCAT.dataset)
+                    .listProperties(memberLinkProperty())
                     .toList()
                     .filter { it.isResourceProperty() }
                     .map { it.resource }

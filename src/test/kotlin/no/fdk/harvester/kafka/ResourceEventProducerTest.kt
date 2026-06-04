@@ -33,6 +33,7 @@ import org.springframework.kafka.support.SendResult
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.CompletableFuture
+import kotlin.collections.emptyMap
 
 @Tag("unit")
 class ResourceEventProducerTest {
@@ -56,7 +57,7 @@ class ResourceEventProducerTest {
 
         every { kafkaTemplate.send(any<String>(), any<String>(), any()) } returns
             CompletableFuture.completedFuture(mockk<SendResult<String, SpecificRecord>>())
-        producer.publishHarvestedEvents(DataType.dataset, resources, graphs, runId = "run-1")
+        producer.publishHarvestedEvents(DataType.dataset, resources, graphs, runId = "run-1", catalogGraphs = emptyMap())
 
         val recordSlot = slot<SpecificRecord>()
         verify(exactly = 1) { kafkaTemplate.send(eq("dataset-events"), eq("fdk-1"), capture(recordSlot)) }
@@ -170,6 +171,7 @@ class ResourceEventProducerTest {
                 resources = listOf(FdkIdAndUri(fdkId = "fdk-1", uri = "http://example.org/u")),
                 resourceGraphs = mapOf("fdk-1" to "<g>"),
                 runId = "run-1",
+                catalogGraphs = emptyMap(),
             )
             assertEquals(expectedTopic, topics.single())
             assertEquals("fdk-1", keys.single())
@@ -277,6 +279,7 @@ class ResourceEventProducerTest {
                 resources = listOf(FdkIdAndUri(fdkId = "fdk-1", uri = "http://example.org/ds1")),
                 resourceGraphs = mapOf("fdk-1" to "<ttl>"),
                 runId = "run-1",
+                catalogGraphs = emptyMap(),
             )
         }
     }
@@ -327,6 +330,7 @@ class ResourceEventProducerTest {
             resources = listOf(FdkIdAndUri(fdkId = "fdk-missing", uri = "http://example.org/ds1")),
             resourceGraphs = emptyMap(),
             runId = "run-1",
+            catalogGraphs = emptyMap(),
         )
 
         val record = recordSlot.captured as DatasetEvent

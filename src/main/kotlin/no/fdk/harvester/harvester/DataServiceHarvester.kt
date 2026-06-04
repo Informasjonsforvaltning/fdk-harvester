@@ -10,10 +10,12 @@ import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
+import org.apache.jena.rdf.model.Property
 import org.apache.jena.rdf.model.RDFNode
 import org.apache.jena.rdf.model.Resource
 import org.apache.jena.vocabulary.DCAT
 import org.apache.jena.vocabulary.RDF
+import org.apache.jena.vocabulary.SKOS
 import org.springframework.stereotype.Service
 import java.util.Calendar
 import no.fdk.harvest.DataType as HarvestDataType
@@ -55,6 +57,8 @@ class DataServiceHarvester(
 
     override fun containerRdfType(): Resource = DCAT.Catalog
 
+    override fun memberLinkProperty(): Property = DCAT.service
+
     override fun listMembers(
         harvested: Model,
         sourceURL: String,
@@ -63,7 +67,7 @@ class DataServiceHarvester(
             .listResourcesWithProperty(RDF.type, DCAT.DataService)
             .toList()
             .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(DCAT.service) }
+            .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
@@ -76,11 +80,6 @@ class DataServiceHarvester(
             members = members,
             sourceURL = sourceURL,
             organization = organization,
-            memberLinkProperty = DCAT.service,
-            addMembersToGeneratedContainer = { memberUris ->
-                memberUris.forEach { addProperty(DCAT.service, model.createResource(it)) }
-                this
-            },
         )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(DCAT.DataService)

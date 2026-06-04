@@ -122,7 +122,7 @@ class KafkaHarvestEventCircuitBreakerTest {
         verify(exactly = 0) { harvestService.executeHarvest(any(), any(), any(), any(), any(), any()) }
         verify(exactly = 0) { harvestService.markResourcesAsDeleted(any(), any(), any(), any()) }
         verify(exactly = 0) { harvestEventProducer.produceHarvestingEvent(any(), any()) }
-        verify(exactly = 0) { resourceEventProducer.publishHarvestedEvents(any(), any(), any(), any()) }
+        verify(exactly = 0) { resourceEventProducer.publishHarvestedEvents(any(), any(), any(), any(), any()) }
         verify(exactly = 0) { resourceEventProducer.publishRemovedEvents(any(), any(), any()) }
     }
 
