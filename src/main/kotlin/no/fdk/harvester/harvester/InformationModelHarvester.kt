@@ -59,7 +59,7 @@ class InformationModelHarvester(
 
     override fun containerRdfType(): Resource = DCAT.Catalog
 
-    override fun memberLinkProperty(): Property = ModellDCATAPNO.InformationModel
+    override fun memberLinkProperty(): Property = ModellDCATAPNO.model
 
     override fun listMembers(
         harvested: Model,
