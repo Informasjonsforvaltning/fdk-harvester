@@ -7,7 +7,6 @@ import no.fdk.harvester.model.ResourceEntity
 import no.fdk.harvester.model.ResourceType
 import no.fdk.harvester.rdf.createIdFromString
 import no.fdk.harvester.rdf.createRDFResponse
-import no.fdk.harvester.rdf.safeParseRDF
 import org.apache.jena.rdf.model.Model
 import org.apache.jena.rdf.model.Resource
 import org.apache.jena.rdf.model.ResourceFactory
@@ -25,13 +24,6 @@ import java.util.Calendar
 
 private val LOGGER = LoggerFactory.getLogger(Application::class.java)
 private const val DATE_FORMAT: String = "yyyy-MM-dd HH:mm:ss Z"
-
-fun Model.harvestDiff(dboNoRecords: String?): Boolean =
-    if (dboNoRecords == null) {
-        true
-    } else {
-        !isIsomorphicWith(safeParseRDF(dboNoRecords, Lang.TURTLE))
-    }
 
 internal fun Model.recursiveBlankNodeSkolem(baseURI: String): Model {
     val anonSubjects = listSubjects().toList().filter { it.isAnon }
@@ -107,12 +99,6 @@ fun Statement.isResourceProperty(): Boolean =
     } catch (ex: ResourceRequiredException) {
         false
     }
-
-fun calendarFromTimestamp(timestamp: Long): Calendar {
-    val calendar = Calendar.getInstance()
-    calendar.timeInMillis = timestamp
-    return calendar
-}
 
 fun formatNowWithOsloTimeZone(): String =
     ZonedDateTime

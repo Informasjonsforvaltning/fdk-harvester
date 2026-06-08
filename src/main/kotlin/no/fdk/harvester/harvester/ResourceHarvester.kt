@@ -416,10 +416,6 @@ abstract class ResourceHarvester(
                 add(property)
             }
 
-            property.isResourceProperty() && property.resource.isURIResource -> {
-                add(property)
-            }
-
             else -> {
                 this
             }
