@@ -50,6 +50,7 @@ class HarvesterHappyPathTest {
             val resourceRepository = mockResourceRepository()
             val harvestSourceRepository = mockHarvestSourceRepository()
             val resourceGraphsSlot = slot<Map<String, String>>()
+            val catalogGraphsSlot = slot<Map<String, String>>()
             val producer = mockk<ResourceEventProducer>(relaxed = true)
 
             val appProps =
@@ -81,19 +82,27 @@ class HarvesterHappyPathTest {
                     resources = any(),
                     resourceGraphs = capture(resourceGraphsSlot),
                     runId = any(),
-                    catalogGraphs = any(),
+                    catalogGraphs = capture(catalogGraphsSlot),
                 )
             }
-            val graphs = resourceGraphsSlot.captured
-            assertTrue(graphs.isNotEmpty(), "produced graphs should not be empty")
-            val graphWithRecord = graphs.values.first()
+            val resourceGraphs = resourceGraphsSlot.captured
+            assertTrue(resourceGraphs.isNotEmpty(), "produced graphs should not be empty")
+            val resourceGraph = resourceGraphs.values.first()
+            assertFalse(
+                resourceGraph.contains("CatalogRecord") || resourceGraph.contains("dcat:CatalogRecord"),
+                "resource graph should not contain catalog record (dcat:CatalogRecord)",
+            )
+
+            val catalogGraphs = catalogGraphsSlot.captured
+            assertTrue(catalogGraphs.isNotEmpty(), "produced catalog graphs should not be empty")
+            val catalogGraph = catalogGraphs.values.first()
             assertTrue(
-                graphWithRecord.contains("CatalogRecord") || graphWithRecord.contains("dcat:CatalogRecord"),
-                "produced graph should contain catalog record (dcat:CatalogRecord)",
+                catalogGraph.contains("CatalogRecord") || catalogGraph.contains("dcat:CatalogRecord"),
+                "catalog graph should contain catalog record (dcat:CatalogRecord)",
             )
             assertTrue(
-                graphWithRecord.contains("isPartOf") || graphWithRecord.contains("dct:isPartOf"),
-                "produced graph should contain dct:isPartOf for record",
+                catalogGraph.contains("isPartOf") || catalogGraph.contains("dct:isPartOf"),
+                "catalog graph should contain dct:isPartOf for record",
             )
         } finally {
             server.stop()
@@ -504,6 +513,7 @@ class HarvesterHappyPathTest {
             val resourceRepository = mockResourceRepository()
             val harvestSourceRepository = mockHarvestSourceRepository()
             val resourceGraphsSlot = slot<Map<String, String>>()
+            val catalogGraphsSlot = slot<Map<String, String>>()
             val producer = mockk<ResourceEventProducer>(relaxed = true)
 
             val appProps =
@@ -536,7 +546,7 @@ class HarvesterHappyPathTest {
                     resources = any(),
                     resourceGraphs = capture(resourceGraphsSlot),
                     runId = any(),
-                    catalogGraphs = any(),
+                    catalogGraphs = capture(catalogGraphsSlot),
                 )
             }
 
@@ -548,10 +558,6 @@ class HarvesterHappyPathTest {
             assertTrue(
                 serviceGraph.contains("PublicService"),
                 "produced graph should type the resource as a public service",
-            )
-            assertTrue(
-                serviceGraph.contains("CatalogRecord") && serviceGraph.contains(serviceUri),
-                "produced graph should contain a catalog record with the service as primary topic",
             )
             assertTrue(
                 serviceGraph.contains("$serviceUri/output/0") && serviceGraph.contains("Produserer-tittel"),
@@ -566,6 +572,12 @@ class HarvesterHappyPathTest {
                     serviceGraph.contains("Name") &&
                     serviceGraph.contains("dokumentasjon 2"),
                 "produced graph should inline the required evidence titles",
+            )
+
+            val catalogGraph = catalogGraphsSlot.captured.values.first()
+            assertTrue(
+                catalogGraph.contains("CatalogRecord") && catalogGraph.contains(serviceUri),
+                "produced graph should contain a catalog record with the service as primary topic",
             )
         } finally {
             server.stop()

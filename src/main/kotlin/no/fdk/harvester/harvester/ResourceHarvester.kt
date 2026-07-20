@@ -45,6 +45,12 @@ data class ContainerRDFModel(
     val memberURIs: Set<String>,
 )
 
+data class UpdatedMembersResult(
+    val updatedMembers: List<FdkIdAndUri>,
+    val resourceGraphs: Map<String, String>,
+    val metaRecordModels: Map<String, Model>,
+)
+
 /**
  * Abstract base for every type-specific harvester. Extracts typed member resources and their
  * containers (DCAT catalogs / SKOS collections) from the source RDF, persists each member and each
@@ -98,7 +104,7 @@ abstract class ResourceHarvester(
         val containers = extractContainers(harvested, members, sourceUrl, organization)
         val (updatedContainers, memberToContainerFdkUri) =
             updateContainers(containers, harvestDate, forceUpdate, harvestSource)
-        val (updatedMembers, resourceGraphs) =
+        val updateResult =
             updateMembers(
                 members,
                 harvestDate,
@@ -124,18 +130,23 @@ abstract class ResourceHarvester(
                 sourceUrl = sourceUrl,
                 harvestDate = harvestDate,
                 changedCatalogs = updatedContainers,
-                changedResources = updatedMembers,
+                changedResources = updateResult.updatedMembers,
                 removedResources = removedMembers.map { FdkIdAndUri(fdkId = it.fdkId, uri = it.uri) },
                 runId = runId,
             )
 
-        if (updatedMembers.isNotEmpty()) {
+        if (updateResult.updatedMembers.isNotEmpty()) {
             resourceEventProducer.publishHarvestedEvents(
                 dataType = harvestConfig.harvestDataType,
-                resources = updatedMembers,
-                resourceGraphs = resourceGraphs,
+                resources = updateResult.updatedMembers,
+                resourceGraphs = updateResult.resourceGraphs,
                 runId = runId,
-                catalogGraphs = catalogGraphforUpdatedMember(updatedMembers, containers),
+                catalogGraphs =
+                    catalogGraphsForUpdatedMembers(
+                        updateResult.updatedMembers,
+                        containers,
+                        updateResult.metaRecordModels,
+                    ),
             )
         }
 
@@ -228,8 +239,9 @@ abstract class ResourceHarvester(
         forceUpdate: Boolean,
         harvestSource: HarvestSourceEntity,
         memberToContainerFdkUri: Map<String, String>,
-    ): Pair<List<FdkIdAndUri>, Map<String, String>> {
+    ): UpdatedMembersResult {
         val resourceGraphs = mutableMapOf<String, String>()
+        val metaRecordModels = mutableMapOf<String, Model>()
         val updatedMembers =
             members.mapNotNull { member ->
                 try {
@@ -245,7 +257,7 @@ abstract class ResourceHarvester(
                         dbMeta = dbMeta,
                     )?.let { meta ->
                         val parentFdkUri = memberToContainerFdkUri[member.resourceURI]
-                        val catalogRecordModel =
+                        metaRecordModels[meta.fdkId] =
                             createCatalogRecordModel(
                                 resourceUri = meta.uri,
                                 fdkId = meta.fdkId,
@@ -260,8 +272,8 @@ abstract class ResourceHarvester(
                                         null
                                     },
                             )
-                        val graphWithRecords = member.harvested.union(catalogRecordModel)
-                        val graphString = graphWithRecords.createRDFResponse(Lang.TURTLE)
+
+                        val graphString = member.harvested.createRDFResponse(Lang.TURTLE)
                         resourceGraphs[meta.fdkId] = graphString
                         FdkIdAndUri(fdkId = meta.fdkId, uri = member.resourceURI)
                     }
@@ -276,7 +288,11 @@ abstract class ResourceHarvester(
                 }
             }
 
-        return Pair(updatedMembers, resourceGraphs)
+        return UpdatedMembersResult(
+            updatedMembers = updatedMembers,
+            resourceGraphs = resourceGraphs,
+            metaRecordModels = metaRecordModels,
+        )
     }
 
     /**
@@ -435,9 +451,10 @@ abstract class ResourceHarvester(
         return this
     }
 
-    private fun catalogGraphforUpdatedMember(
+    private fun catalogGraphsForUpdatedMembers(
         updatedMembers: List<FdkIdAndUri>,
         containers: List<ContainerRDFModel>,
+        metaRecordModels: Map<String, Model>,
     ): Map<String, String> {
         val catalogGraphs = mutableMapOf<String, String>()
 
@@ -447,6 +464,9 @@ abstract class ResourceHarvester(
             if (container != null) {
                 model.add(container.harvestedWithoutMembers)
                 model.getResource(container.resourceURI).addMembersToContainer(setOf(member.uri))
+            }
+            if (metaRecordModels[member.fdkId] != null) {
+                model.add(metaRecordModels[member.fdkId])
             }
 
             catalogGraphs[member.fdkId] = model.createRDFResponse(Lang.TURTLE)
