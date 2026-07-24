@@ -5,12 +5,14 @@ import no.fdk.harvest.HarvestEvent
 import no.fdk.harvest.HarvestPhase
 import no.fdk.harvester.error.HarvestErrorCategory
 import no.fdk.harvester.error.HarvestErrorMessageMapper
+import no.fdk.harvester.metrics.HarvestMetrics
 import no.fdk.harvester.service.HarvestServiceApi
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.stereotype.Component
+import kotlin.time.measureTimedValue
 
 /**
  * Processes only INITIATING phase [HarvestEvent] messages: either marks all resources for a source as deleted
@@ -55,6 +57,12 @@ open class KafkaHarvestEventCircuitBreaker(
                 }
             } catch (e: IllegalArgumentException) {
                 LOGGER.error("${e.message}, skipping")
+                HarvestMetrics.recordError(
+                    dataType = event.dataType,
+                    forceUpdate = event.forced ?: false,
+                    dataSourceId = event.dataSourceId?.toString(),
+                    dataSourceUrl = event.dataSourceUrl?.toString(),
+                )
                 // Validation problem with the incoming event – report as a user-friendly failure.
                 val errorMessage =
                     HarvestErrorMessageMapper.toUserMessage(
@@ -80,6 +88,12 @@ open class KafkaHarvestEventCircuitBreaker(
                 LOGGER.error(
                     "Error processing harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}",
                     e,
+                )
+                HarvestMetrics.recordError(
+                    dataType = event.dataType,
+                    forceUpdate = event.forced ?: false,
+                    dataSourceId = event.dataSourceId?.toString(),
+                    dataSourceUrl = event.dataSourceUrl?.toString(),
                 )
 
                 val category =
@@ -130,15 +144,27 @@ open class KafkaHarvestEventCircuitBreaker(
                 "Harvest event missing acceptHeader"
             }
 
-        val report =
-            harvestService.executeHarvest(
-                dataSourceId = dataSourceId,
-                dataSourceUrl = dataSourceUrl,
-                dataType = event.dataType,
-                acceptHeader = acceptHeader,
-                runId = runId,
-                forced = event.forced ?: false,
-            )
+        val forced = event.forced ?: false
+        val (report, duration) =
+            measureTimedValue {
+                harvestService.executeHarvest(
+                    dataSourceId = dataSourceId,
+                    dataSourceUrl = dataSourceUrl,
+                    dataType = event.dataType,
+                    acceptHeader = acceptHeader,
+                    runId = runId,
+                    forced = forced,
+                )
+            }
+
+        HarvestMetrics.record(
+            report = report,
+            dataType = event.dataType,
+            forceUpdate = forced,
+            dataSourceId = dataSourceId,
+            dataSourceUrl = dataSourceUrl,
+            duration = duration,
+        )
 
         // Emit HARVESTING phase event after completion so counts are included.
         harvestEventProducer.produceHarvestingEvent(event, report)
@@ -160,13 +186,25 @@ open class KafkaHarvestEventCircuitBreaker(
                 "RemoveAll event missing dataSourceUrl"
             }
 
-        val report =
-            harvestService.markResourcesAsDeleted(
-                sourceUrl = dataSourceUrl,
-                dataType = event.dataType,
-                dataSourceId = dataSourceId,
-                runId = runId,
-            )
+        val forced = event.forced ?: false
+        val (report, duration) =
+            measureTimedValue {
+                harvestService.markResourcesAsDeleted(
+                    sourceUrl = dataSourceUrl,
+                    dataType = event.dataType,
+                    dataSourceId = dataSourceId,
+                    runId = runId,
+                )
+            }
+
+        HarvestMetrics.record(
+            report = report,
+            dataType = event.dataType,
+            forceUpdate = forced,
+            dataSourceId = dataSourceId,
+            dataSourceUrl = dataSourceUrl,
+            duration = duration,
+        )
 
         LOGGER.debug("Successfully marked ${report.removedResources.size} resources as deleted for dataSourceUrl: $dataSourceUrl")
 
@@ -197,15 +235,28 @@ open class KafkaHarvestEventCircuitBreaker(
             requireNotNull(event.dataSourceId?.toString()) {
                 "Remove event missing dataSourceId"
             }
+        val dataSourceUrl = event.dataSourceUrl?.toString() ?: ""
 
-        val report =
-            harvestService.markResourceAsDeletedByFdkId(
-                fdkId = fdkId,
-                uri = uri,
-                dataType = event.dataType,
-                runId = runId,
-                dataSourceId = dataSourceId,
-            )
+        val forced = event.forced ?: false
+        val (report, duration) =
+            measureTimedValue {
+                harvestService.markResourceAsDeletedByFdkId(
+                    fdkId = fdkId,
+                    uri = uri,
+                    dataType = event.dataType,
+                    runId = runId,
+                    dataSourceId = dataSourceId,
+                )
+            }
+
+        HarvestMetrics.record(
+            report = report,
+            dataType = event.dataType,
+            forceUpdate = forced,
+            dataSourceId = dataSourceId,
+            dataSourceUrl = dataSourceUrl,
+            duration = duration,
+        )
 
         // Publish removed resource event
         resourceEventProducer.publishRemovedEvents(

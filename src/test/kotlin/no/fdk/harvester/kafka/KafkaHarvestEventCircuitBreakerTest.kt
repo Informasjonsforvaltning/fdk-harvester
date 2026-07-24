@@ -1,6 +1,8 @@
 package no.fdk.harvester.kafka
 
 import io.github.resilience4j.circuitbreaker.CircuitBreaker
+import io.micrometer.core.instrument.Metrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.clearAllMocks
 import io.mockk.every
 import io.mockk.mockk
@@ -12,6 +14,8 @@ import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestReport
 import no.fdk.harvester.service.HarvestServiceApi
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
@@ -24,10 +28,13 @@ class KafkaHarvestEventCircuitBreakerTest {
     private val resourceEventProducer: ResourceEventProducer = mockk(relaxed = true)
 
     private lateinit var circuitBreaker: KafkaHarvestEventCircuitBreaker
+    private lateinit var meterRegistry: SimpleMeterRegistry
 
     @BeforeEach
     fun setUp() {
         clearAllMocks()
+        meterRegistry = SimpleMeterRegistry()
+        Metrics.addRegistry(meterRegistry)
         circuitBreaker =
             KafkaHarvestEventCircuitBreaker(
                 harvestService,
@@ -35,6 +42,12 @@ class KafkaHarvestEventCircuitBreakerTest {
                 resourceEventProducer,
                 CircuitBreaker.ofDefaults("test-cb"),
             )
+    }
+
+    @AfterEach
+    fun tearDown() {
+        Metrics.removeRegistry(meterRegistry)
+        meterRegistry.clear()
     }
 
     @Test
@@ -58,6 +71,23 @@ class KafkaHarvestEventCircuitBreakerTest {
             )
         }
         verify { harvestEventProducer.produceHarvestingEvent(event, report) }
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_count",
+                    "status",
+                    "success",
+                    "type",
+                    "concept",
+                    "force_update",
+                    "false",
+                    "datasource_id",
+                    "source-1",
+                    "datasource_url",
+                    "http://example.org/source",
+                ).count(),
+        )
     }
 
     @Test
@@ -174,6 +204,23 @@ class KafkaHarvestEventCircuitBreakerTest {
         }
 
         verify { harvestService.executeHarvest(any(), any(), any(), any(), any(), any()) }
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_count",
+                    "status",
+                    "error",
+                    "type",
+                    "concept",
+                    "force_update",
+                    "false",
+                    "datasource_id",
+                    "source-1",
+                    "datasource_url",
+                    "http://example.org/source",
+                ).count(),
+        )
     }
 
     @Test
@@ -197,6 +244,24 @@ class KafkaHarvestEventCircuitBreakerTest {
 
         verify { harvestService.executeHarvest(any(), any(), any(), any(), any(), any()) }
         verify { harvestEventProducer.produceHarvestingEvent(event, errorReport) }
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_count",
+                    "status",
+                    "error",
+                    "type",
+                    "concept",
+                    "force_update",
+                    "false",
+                    "datasource_id",
+                    "source-1",
+                    "datasource_url",
+                    "http://example.org/source",
+                ).count(),
+        )
+        assertEquals(0L, meterRegistry.find("harvest_time").timer()?.count() ?: 0L)
     }
 
     @Test
@@ -255,6 +320,23 @@ class KafkaHarvestEventCircuitBreakerTest {
         circuitBreaker.process(record)
 
         verify(exactly = 0) { harvestService.markResourceAsDeletedByFdkId(any(), any(), any(), any(), any()) }
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_count",
+                    "status",
+                    "error",
+                    "type",
+                    "concept",
+                    "force_update",
+                    "false",
+                    "datasource_id",
+                    "source-1",
+                    "datasource_url",
+                    "http://example.org/source",
+                ).count(),
+        )
     }
 
     @Test
