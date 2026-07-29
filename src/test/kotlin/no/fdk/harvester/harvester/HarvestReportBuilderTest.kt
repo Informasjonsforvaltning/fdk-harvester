@@ -1,5 +1,6 @@
 package no.fdk.harvester.harvester
 
+import no.fdk.harvester.error.HarvestErrorCategory
 import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestDataSource
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -86,6 +87,7 @@ class HarvestReportBuilderTest {
                 dataType = "event",
                 source = source,
                 errorMessage = "Test error",
+                errorCategory = HarvestErrorCategory.SOURCE_UNAVAILABLE,
                 harvestDate = harvestDate,
                 runId = "run-123",
             )
@@ -96,6 +98,7 @@ class HarvestReportBuilderTest {
         assertEquals("event", report.dataType)
         assertTrue(report.harvestError)
         assertEquals("Test error", report.errorMessage)
+        assertEquals(HarvestErrorCategory.SOURCE_UNAVAILABLE, report.errorCategory)
         assertTrue(report.changedCatalogs.isEmpty())
         assertTrue(report.changedResources.isEmpty())
         assertTrue(report.removedResources.isEmpty())

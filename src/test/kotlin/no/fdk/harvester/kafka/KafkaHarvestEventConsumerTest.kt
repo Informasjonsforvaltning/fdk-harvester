@@ -1,13 +1,19 @@
 package no.fdk.harvester.kafka
 
+import io.micrometer.core.instrument.Metrics
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import no.fdk.harvest.DataType
 import no.fdk.harvest.HarvestEvent
 import no.fdk.harvest.HarvestPhase
+import no.fdk.harvester.metrics.KafkaHarvestMetrics
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.assertj.core.api.Assertions.assertThat
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import org.springframework.kafka.support.Acknowledgment
@@ -18,6 +24,19 @@ class KafkaHarvestEventConsumerTest {
     private val circuitBreaker: KafkaHarvestEventCircuitBreakerApi = mockk()
     private val consumer = KafkaHarvestEventConsumer(circuitBreaker)
     private val ack: Acknowledgment = mockk(relaxed = true)
+    private lateinit var meterRegistry: SimpleMeterRegistry
+
+    @BeforeEach
+    fun setUpMetrics() {
+        meterRegistry = SimpleMeterRegistry()
+        Metrics.addRegistry(meterRegistry)
+    }
+
+    @AfterEach
+    fun tearDownMetrics() {
+        Metrics.removeRegistry(meterRegistry)
+        meterRegistry.clear()
+    }
 
     @Test
     fun `consumer has non-null logger so logging never throws NPE`() {
@@ -46,6 +65,17 @@ class KafkaHarvestEventConsumerTest {
         verify(exactly = 1) { ack.acknowledge() }
         verify(exactly = 0) { circuitBreaker.process(any()) }
         verify(exactly = 0) { ack.nack(any<Duration>()) }
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_event_processing_total",
+                    "phase",
+                    "harvesting",
+                    "result",
+                    "skipped",
+                ).count(),
+        )
     }
 
     @Test
@@ -94,5 +124,16 @@ class KafkaHarvestEventConsumerTest {
         verify(exactly = 1) { circuitBreaker.process(record) }
         verify(exactly = 1) { ack.nack(Duration.ZERO) }
         verify(exactly = 0) { ack.acknowledge() }
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_event_processing_total",
+                    "phase",
+                    "initiating",
+                    "result",
+                    "error",
+                ).count(),
+        )
     }
 }

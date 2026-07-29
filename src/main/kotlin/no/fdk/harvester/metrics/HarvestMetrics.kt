@@ -2,6 +2,7 @@ package no.fdk.harvester.metrics
 
 import io.micrometer.core.instrument.Metrics
 import no.fdk.harvest.DataType
+import no.fdk.harvester.error.HarvestErrorCategory
 import no.fdk.harvester.model.HarvestReport
 import kotlin.time.Duration
 import kotlin.time.toJavaDuration
@@ -33,6 +34,13 @@ object HarvestMetrics {
                 "datasource_url",
                 dataSourceUrl,
             ).increment()
+
+        if (!success) {
+            recordErrorCount(
+                category = report?.errorCategory ?: HarvestErrorCategory.INTERNAL_ERROR,
+                dataType = dataType,
+            )
+        }
 
         if (success && report != null) {
             Metrics
@@ -79,6 +87,7 @@ object HarvestMetrics {
         forceUpdate: Boolean,
         dataSourceId: String?,
         dataSourceUrl: String?,
+        category: HarvestErrorCategory,
     ) {
         Metrics
             .counter(
@@ -93,6 +102,21 @@ object HarvestMetrics {
                 dataSourceId ?: "",
                 "datasource_url",
                 dataSourceUrl ?: "",
+            ).increment()
+        recordErrorCount(category = category, dataType = dataType)
+    }
+
+    fun recordErrorCount(
+        category: HarvestErrorCategory,
+        dataType: DataType,
+    ) {
+        Metrics
+            .counter(
+                "harvest_error_count",
+                "category",
+                category.name.lowercase(),
+                "type",
+                metricType(dataType),
             ).increment()
     }
 

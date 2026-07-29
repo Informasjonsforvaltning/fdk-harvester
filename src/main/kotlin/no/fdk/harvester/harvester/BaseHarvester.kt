@@ -133,6 +133,7 @@ abstract class BaseHarvester(
                                 dataSourceUrl = source.url,
                                 dataType = null,
                             ),
+                        errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
                         harvestDate = harvestDate,
                         runId = runId,
                     )
@@ -152,6 +153,7 @@ abstract class BaseHarvester(
                                 dataSourceUrl = source.url,
                                 dataType = null,
                             ),
+                        errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
                         harvestDate = harvestDate,
                         runId = runId,
                     )
@@ -190,6 +192,7 @@ abstract class BaseHarvester(
                         dataType = null,
                         originalError = ex.message,
                     ),
+                errorCategory = category,
                 harvestDate = harvestDate,
                 runId = runId,
             )

@@ -1,5 +1,6 @@
 package no.fdk.harvester.harvester
 
+import no.fdk.harvester.error.HarvestErrorCategory
 import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestReport
@@ -54,6 +55,7 @@ object HarvestReportBuilder {
         dataType: String,
         source: HarvestDataSource,
         errorMessage: String,
+        errorCategory: HarvestErrorCategory,
         harvestDate: Calendar,
         runId: String,
     ): HarvestReport {
@@ -66,6 +68,7 @@ object HarvestReportBuilder {
             dataType = dataType,
             harvestError = true,
             errorMessage = errorMessage,
+            errorCategory = errorCategory,
             startTime = harvestDate.formatWithOsloTimeZone(),
             endTime = formatNowWithOsloTimeZone(),
         )
