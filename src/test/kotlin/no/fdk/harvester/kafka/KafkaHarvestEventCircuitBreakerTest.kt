@@ -10,6 +10,10 @@ import io.mockk.verify
 import no.fdk.harvest.DataType
 import no.fdk.harvest.HarvestEvent
 import no.fdk.harvest.HarvestPhase
+import no.fdk.harvester.error.HarvestErrorCategory
+import no.fdk.harvester.metrics.HarvestMetrics
+import no.fdk.harvester.metrics.KafkaHarvestMetrics
+import no.fdk.harvester.metrics.ResourceEventMetrics
 import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestReport
 import no.fdk.harvester.service.HarvestServiceApi
@@ -35,6 +39,9 @@ class KafkaHarvestEventCircuitBreakerTest {
         clearAllMocks()
         meterRegistry = SimpleMeterRegistry()
         Metrics.addRegistry(meterRegistry)
+        HarvestMetrics.bind(Metrics.globalRegistry)
+        KafkaHarvestMetrics.bind(Metrics.globalRegistry)
+        ResourceEventMetrics.bind(Metrics.globalRegistry)
         circuitBreaker =
             KafkaHarvestEventCircuitBreaker(
                 harvestService,
@@ -221,6 +228,17 @@ class KafkaHarvestEventCircuitBreakerTest {
                     "http://example.org/source",
                 ).count(),
         )
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_error_count",
+                    "category",
+                    "internal_error",
+                    "type",
+                    "concept",
+                ).count(),
+        )
     }
 
     @Test
@@ -236,6 +254,7 @@ class KafkaHarvestEventCircuitBreakerTest {
                 harvestError = true,
                 startTime = "2024-01-01T00:00:00+01:00",
                 endTime = "2024-01-01T00:01:00+01:00",
+                errorCategory = HarvestErrorCategory.SOURCE_DATA_INVALID,
             )
 
         every { harvestService.executeHarvest(any(), any(), any(), any(), any(), any()) } returns errorReport
@@ -262,6 +281,17 @@ class KafkaHarvestEventCircuitBreakerTest {
                 ).count(),
         )
         assertEquals(0L, meterRegistry.find("harvest_time").timer()?.count() ?: 0L)
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_error_count",
+                    "category",
+                    "source_data_invalid",
+                    "type",
+                    "concept",
+                ).count(),
+        )
     }
 
     @Test
@@ -335,6 +365,17 @@ class KafkaHarvestEventCircuitBreakerTest {
                     "source-1",
                     "datasource_url",
                     "http://example.org/source",
+                ).count(),
+        )
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_error_count",
+                    "category",
+                    "validation_error",
+                    "type",
+                    "concept",
                 ).count(),
         )
     }

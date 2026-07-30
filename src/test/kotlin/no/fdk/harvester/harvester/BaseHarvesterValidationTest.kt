@@ -17,6 +17,7 @@ import no.fdk.harvester.model.HarvestSourceEntity
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
 import org.apache.jena.rdf.model.Model
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -28,7 +29,7 @@ import java.util.Calendar
 @Tag("unit")
 class BaseHarvesterValidationTest {
     @Test
-    fun `invalid source without id or url returns null`() {
+    fun `invalid source without id or url returns validation error report`() {
         val repo = mockk<HarvestSourceRepository>()
         val harvester = TestHarvester(repo, mockk(relaxed = true))
 
@@ -38,11 +39,13 @@ class BaseHarvesterValidationTest {
                 harvestDate = Calendar.getInstance(),
             )
 
-        assertNull(report)
+        assertNotNull(report)
+        assertTrue(report!!.harvestError)
+        assertEquals(no.fdk.harvester.error.HarvestErrorCategory.VALIDATION_ERROR, report.errorCategory)
     }
 
     @Test
-    fun `missing accept header returns null when required`() {
+    fun `missing accept header returns validation error report when required`() {
         val repo = mockk<HarvestSourceRepository>()
         val harvester = TestHarvester(repo, mockk(relaxed = true))
 
@@ -52,7 +55,9 @@ class BaseHarvesterValidationTest {
                 harvestDate = Calendar.getInstance(),
             )
 
-        assertNull(report)
+        assertNotNull(report)
+        assertTrue(report!!.harvestError)
+        assertEquals(no.fdk.harvester.error.HarvestErrorCategory.VALIDATION_ERROR, report.errorCategory)
     }
 
     @Test

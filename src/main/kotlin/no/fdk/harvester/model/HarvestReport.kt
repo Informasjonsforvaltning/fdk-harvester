@@ -1,6 +1,7 @@
 package no.fdk.harvester.model
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+import no.fdk.harvester.error.HarvestErrorCategory
 
 /**
  * Result of a harvest or delete operation: run id, source id/url, data type, timestamps,
@@ -16,6 +17,7 @@ data class HarvestReport(
     val startTime: String,
     val endTime: String,
     val errorMessage: String? = null,
+    val errorCategory: HarvestErrorCategory? = null,
     val changedCatalogs: List<FdkIdAndUri> = emptyList(),
     val changedResources: List<FdkIdAndUri> = emptyList(),
     val removedResources: List<FdkIdAndUri> = emptyList(),

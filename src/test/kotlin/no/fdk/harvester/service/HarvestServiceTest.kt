@@ -545,7 +545,7 @@ class HarvestServiceTest {
     }
 
     @Test
-    fun `executeHarvest returns null for all data types when corresponding harvester is null`() {
+    fun `executeHarvest returns error report for all data types when corresponding harvester is null`() {
         val service =
             HarvestService(
                 conceptHarvester = null,
@@ -579,7 +579,13 @@ class HarvestServiceTest {
                     runId = "run-1",
                     forced = false,
                 )
-            assertNull(result, "Expected null for dataType $dataType when harvester is null")
+            assertNotNull(result, "Expected error report for dataType $dataType when harvester is null")
+            assertTrue(result!!.harvestError, "Expected harvestError for dataType $dataType")
+            assertEquals(
+                no.fdk.harvester.error.HarvestErrorCategory.INTERNAL_ERROR,
+                result.errorCategory,
+                "Expected INTERNAL_ERROR for dataType $dataType",
+            )
         }
     }
 

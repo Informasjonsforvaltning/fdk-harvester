@@ -34,6 +34,7 @@
         <jena.version>6.0.0</jena.version>
         <avro.version>1.12.1</avro.version>
         <confluent.version>8.2.0</confluent.version>
+        <resilience4j.version>2.4.0</resilience4j.version>
     </properties>
 
     <repositories>
@@ -157,7 +158,12 @@
         <dependency>
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-circuitbreaker</artifactId>
-            <version>2.4.0</version>
+            <version>${resilience4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-micrometer</artifactId>
+            <version>${resilience4j.version}</version>
         </dependency>
 
         <!-- RDF dependencies -->

@@ -9,6 +9,8 @@ import no.fdk.dataset.DatasetEventType
 import no.fdk.event.EventEvent
 import no.fdk.event.EventEventType
 import no.fdk.harvest.DataType
+import no.fdk.harvester.metrics.ResourceEventMetrics
+import no.fdk.harvester.metrics.ResourceEventMetrics.PublishOutcome
 import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.informationmodel.InformationModelEvent
 import no.fdk.informationmodel.InformationModelEventType
@@ -77,6 +79,11 @@ class ResourceEventProducer(
         val topicName =
             topicByDataType[dataType] ?: run {
                 logger.warn("No topic configured for dataType: $dataType")
+                ResourceEventMetrics.recordPublish(
+                    dataType = dataType,
+                    kind = kind.toMetricsKind(),
+                    outcome = PublishOutcome.TOPIC_NOT_CONFIGURED,
+                )
                 return
             }
 
@@ -93,24 +100,55 @@ class ResourceEventProducer(
                         ResourceEventKind.REMOVED -> ""
                     }
                 val event = buildEvent(dataType, resource, runId, graph, kind, catalogGraph)
-                kafkaTemplate.send(topicName, resource.fdkId, event)
-                logProducedResourceEvent(
-                    topic = topicName,
-                    key = resource.fdkId,
-                    eventType = "${dataType.name.uppercase()}_${kind.name}",
-                    fdkId = resource.fdkId,
-                    uri = resource.uri,
-                    runId = runId,
-                    graph = graph,
-                )
+                kafkaTemplate
+                    .send(topicName, resource.fdkId, event)
+                    .whenComplete { _, ex ->
+                        ResourceEventMetrics.recordPublish(
+                            dataType = dataType,
+                            kind = kind.toMetricsKind(),
+                            outcome =
+                                if (ex == null) {
+                                    PublishOutcome.SUCCESS
+                                } else {
+                                    PublishOutcome.PUBLISH_FAILED
+                                },
+                        )
+                        if (ex == null) {
+                            logProducedResourceEvent(
+                                topic = topicName,
+                                key = resource.fdkId,
+                                eventType = "${dataType.name.uppercase()}_${kind.name}",
+                                fdkId = resource.fdkId,
+                                uri = resource.uri,
+                                runId = runId,
+                                graph = graph,
+                            )
+                        } else {
+                            logger.error(
+                                "Failed to produce ${dataType.name.uppercase()}_${kind.name} event for fdkId: ${resource.fdkId}, runId: $runId",
+                                ex,
+                            )
+                        }
+                    }
             } catch (e: Exception) {
+                ResourceEventMetrics.recordPublish(
+                    dataType = dataType,
+                    kind = kind.toMetricsKind(),
+                    outcome = PublishOutcome.PUBLISH_FAILED,
+                )
                 logger.error(
-                    "Failed to produce ${dataType.name.uppercase()}_${kind.name} event for fdkId: ${resource.fdkId}, runId: $runId",
+                    "Failed to build or enqueue ${dataType.name.uppercase()}_${kind.name} event for fdkId: ${resource.fdkId}, runId: $runId",
                     e,
                 )
             }
         }
     }
+
+    private fun ResourceEventKind.toMetricsKind(): ResourceEventMetrics.ResourceEventKind =
+        when (this) {
+            ResourceEventKind.HARVESTED -> ResourceEventMetrics.ResourceEventKind.HARVESTED
+            ResourceEventKind.REMOVED -> ResourceEventMetrics.ResourceEventKind.REMOVED
+        }
 
     private fun buildEvent(
         dataType: DataType,

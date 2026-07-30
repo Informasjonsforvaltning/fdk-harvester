@@ -1,7 +1,10 @@
 package no.fdk.harvester.kafka
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import no.fdk.harvest.HarvestEvent
 import no.fdk.harvest.HarvestPhase
+import no.fdk.harvester.metrics.KafkaHarvestMetrics
+import no.fdk.harvester.metrics.KafkaHarvestMetrics.EventProcessingResult
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -37,6 +40,7 @@ class KafkaHarvestEventConsumer(
         // Only process INITIATING phase events
         if (event.phase != HarvestPhase.INITIATING && event.phase != HarvestPhase.REMOVING) {
             logger().debug("Skipping harvest event with phase: {}", event.phase)
+            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.SKIPPED)
             ack.acknowledge()
             return
         }
@@ -45,9 +49,17 @@ class KafkaHarvestEventConsumer(
 
         try {
             circuitBreaker.process(record)
+            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.ACKED)
             ack.acknowledge()
+        } catch (e: CallNotPermittedException) {
+            logger().warn(
+                "Circuit breaker open, rejecting harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}",
+            )
+            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.CIRCUIT_OPEN)
+            ack.nack(Duration.ZERO)
         } catch (e: Exception) {
             logger().error("Error processing harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}", e)
+            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.NACKED)
             ack.nack(Duration.ZERO)
         }
     }

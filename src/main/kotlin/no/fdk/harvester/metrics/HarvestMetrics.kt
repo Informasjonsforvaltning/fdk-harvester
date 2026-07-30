@@ -1,12 +1,20 @@
 package no.fdk.harvester.metrics
 
+import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Metrics
 import no.fdk.harvest.DataType
+import no.fdk.harvester.error.HarvestErrorCategory
 import no.fdk.harvester.model.HarvestReport
 import kotlin.time.Duration
 import kotlin.time.toJavaDuration
 
 object HarvestMetrics {
+    private var registry: MeterRegistry = Metrics.globalRegistry
+
+    fun bind(registry: MeterRegistry) {
+        this.registry = registry
+    }
+
     fun record(
         report: HarvestReport?,
         dataType: DataType,
@@ -19,7 +27,7 @@ object HarvestMetrics {
         val forceUpdateLabel = "$forceUpdate"
         val success = report?.harvestError == false
 
-        Metrics
+        registry
             .counter(
                 "harvest_count",
                 "status",
@@ -34,8 +42,15 @@ object HarvestMetrics {
                 dataSourceUrl,
             ).increment()
 
+        if (!success) {
+            recordErrorCount(
+                category = report?.errorCategory ?: HarvestErrorCategory.INTERNAL_ERROR,
+                dataType = dataType,
+            )
+        }
+
         if (success && report != null) {
-            Metrics
+            registry
                 .counter(
                     "harvest_changed_resources_count",
                     "type",
@@ -47,7 +62,7 @@ object HarvestMetrics {
                     "datasource_url",
                     dataSourceUrl,
                 ).increment(report.changedResources.size.toDouble())
-            Metrics
+            registry
                 .counter(
                     "harvest_removed_resources_count",
                     "type",
@@ -59,7 +74,7 @@ object HarvestMetrics {
                     "datasource_url",
                     dataSourceUrl,
                 ).increment(report.removedResources.size.toDouble())
-            Metrics
+            registry
                 .timer(
                     "harvest_time",
                     "type",
@@ -79,8 +94,9 @@ object HarvestMetrics {
         forceUpdate: Boolean,
         dataSourceId: String?,
         dataSourceUrl: String?,
+        category: HarvestErrorCategory,
     ) {
-        Metrics
+        registry
             .counter(
                 "harvest_count",
                 "status",
@@ -93,6 +109,21 @@ object HarvestMetrics {
                 dataSourceId ?: "",
                 "datasource_url",
                 dataSourceUrl ?: "",
+            ).increment()
+        recordErrorCount(category = category, dataType = dataType)
+    }
+
+    fun recordErrorCount(
+        category: HarvestErrorCategory,
+        dataType: DataType,
+    ) {
+        registry
+            .counter(
+                "harvest_error_count",
+                "category",
+                category.name.lowercase(),
+                "type",
+                metricType(dataType),
             ).increment()
     }
 

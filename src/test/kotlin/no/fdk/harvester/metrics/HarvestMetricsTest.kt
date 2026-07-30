@@ -3,6 +3,7 @@ package no.fdk.harvester.metrics
 import io.micrometer.core.instrument.Metrics
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import no.fdk.harvest.DataType
+import no.fdk.harvester.error.HarvestErrorCategory
 import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestReport
 import org.junit.jupiter.api.AfterEach
@@ -20,6 +21,7 @@ class HarvestMetricsTest {
     fun setUp() {
         registry = SimpleMeterRegistry()
         Metrics.addRegistry(registry)
+        HarvestMetrics.bind(Metrics.globalRegistry)
     }
 
     @AfterEach
@@ -143,6 +145,7 @@ class HarvestMetricsTest {
                 startTime = "2024-01-01T00:00:00+01:00",
                 endTime = "2024-01-01T00:01:00+01:00",
                 errorMessage = "boom",
+                errorCategory = HarvestErrorCategory.SOURCE_UNAVAILABLE,
                 changedResources = listOf(FdkIdAndUri("a", "http://example.org/a")),
             )
 
@@ -180,6 +183,17 @@ class HarvestMetricsTest {
                 ?.count() ?: 0.0,
         )
         assertEquals(0L, registry.find("harvest_time").timer()?.count() ?: 0L)
+        assertEquals(
+            1.0,
+            registry
+                .counter(
+                    "harvest_error_count",
+                    "category",
+                    "source_unavailable",
+                    "type",
+                    "concept",
+                ).count(),
+        )
     }
 
     @Test
@@ -211,15 +225,27 @@ class HarvestMetricsTest {
                 ).count(),
         )
         assertEquals(0L, registry.find("harvest_time").timer()?.count() ?: 0L)
+        assertEquals(
+            1.0,
+            registry
+                .counter(
+                    "harvest_error_count",
+                    "category",
+                    "internal_error",
+                    "type",
+                    "dataset",
+                ).count(),
+        )
     }
 
     @Test
-    fun `recordError increments harvest_count with status error`() {
+    fun `recordError increments harvest_count and harvest_error_count`() {
         HarvestMetrics.recordError(
             dataType = DataType.informationmodel,
             forceUpdate = false,
             dataSourceId = "source-1",
             dataSourceUrl = "http://example.org/source",
+            category = HarvestErrorCategory.VALIDATION_ERROR,
         )
 
         assertEquals(
@@ -237,6 +263,17 @@ class HarvestMetricsTest {
                     "source-1",
                     "datasource_url",
                     "http://example.org/source",
+                ).count(),
+        )
+        assertEquals(
+            1.0,
+            registry
+                .counter(
+                    "harvest_error_count",
+                    "category",
+                    "validation_error",
+                    "type",
+                    "information-model",
                 ).count(),
         )
     }

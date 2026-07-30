@@ -62,6 +62,7 @@ open class KafkaHarvestEventCircuitBreaker(
                     forceUpdate = event.forced ?: false,
                     dataSourceId = event.dataSourceId?.toString(),
                     dataSourceUrl = event.dataSourceUrl?.toString(),
+                    category = HarvestErrorCategory.VALIDATION_ERROR,
                 )
                 // Validation problem with the incoming event – report as a user-friendly failure.
                 val errorMessage =
@@ -89,18 +90,19 @@ open class KafkaHarvestEventCircuitBreaker(
                     "Error processing harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}",
                     e,
                 )
-                HarvestMetrics.recordError(
-                    dataType = event.dataType,
-                    forceUpdate = event.forced ?: false,
-                    dataSourceId = event.dataSourceId?.toString(),
-                    dataSourceUrl = event.dataSourceUrl?.toString(),
-                )
-
                 val category =
                     when (e) {
                         is IllegalStateException -> HarvestErrorCategory.SOURCE_NOT_FOUND
                         else -> HarvestErrorCategory.INTERNAL_ERROR
                     }
+
+                HarvestMetrics.recordError(
+                    dataType = event.dataType,
+                    forceUpdate = event.forced ?: false,
+                    dataSourceId = event.dataSourceId?.toString(),
+                    dataSourceUrl = event.dataSourceUrl?.toString(),
+                    category = category,
+                )
 
                 val errorMessage =
                     HarvestErrorMessageMapper.toUserMessage(
