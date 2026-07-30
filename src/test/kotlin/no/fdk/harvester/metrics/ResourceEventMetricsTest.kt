@@ -17,6 +17,7 @@ class ResourceEventMetricsTest {
     fun setUp() {
         registry = SimpleMeterRegistry()
         Metrics.addRegistry(registry)
+        ResourceEventMetrics.bind(Metrics.globalRegistry)
     }
 
     @AfterEach
@@ -30,12 +31,12 @@ class ResourceEventMetricsTest {
         ResourceEventMetrics.recordPublish(
             dataType = DataType.dataset,
             kind = ResourceEventMetrics.ResourceEventKind.HARVESTED,
-            success = true,
+            outcome = ResourceEventMetrics.PublishOutcome.SUCCESS,
         )
         ResourceEventMetrics.recordPublish(
             dataType = DataType.publicService,
             kind = ResourceEventMetrics.ResourceEventKind.REMOVED,
-            success = false,
+            outcome = ResourceEventMetrics.PublishOutcome.PUBLISH_FAILED,
         )
 
         assertEquals(
@@ -45,6 +46,8 @@ class ResourceEventMetricsTest {
                     "resource_event_publish_total",
                     "status",
                     "success",
+                    "reason",
+                    "published",
                     "type",
                     "dataset",
                     "kind",
@@ -58,6 +61,8 @@ class ResourceEventMetricsTest {
                     "resource_event_publish_total",
                     "status",
                     "error",
+                    "reason",
+                    "publish_failed",
                     "type",
                     "public-service",
                     "kind",

@@ -11,6 +11,9 @@ import no.fdk.harvest.DataType
 import no.fdk.harvest.HarvestEvent
 import no.fdk.harvest.HarvestPhase
 import no.fdk.harvester.error.HarvestErrorCategory
+import no.fdk.harvester.metrics.HarvestMetrics
+import no.fdk.harvester.metrics.KafkaHarvestMetrics
+import no.fdk.harvester.metrics.ResourceEventMetrics
 import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestReport
 import no.fdk.harvester.service.HarvestServiceApi
@@ -36,6 +39,9 @@ class KafkaHarvestEventCircuitBreakerTest {
         clearAllMocks()
         meterRegistry = SimpleMeterRegistry()
         Metrics.addRegistry(meterRegistry)
+        HarvestMetrics.bind(Metrics.globalRegistry)
+        KafkaHarvestMetrics.bind(Metrics.globalRegistry)
+        ResourceEventMetrics.bind(Metrics.globalRegistry)
         circuitBreaker =
             KafkaHarvestEventCircuitBreaker(
                 harvestService,

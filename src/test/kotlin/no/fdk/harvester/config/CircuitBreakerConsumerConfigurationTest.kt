@@ -8,7 +8,9 @@ import io.mockk.mockk
 import io.mockk.verify
 import no.fdk.harvester.config.CircuitBreakerConsumerConfiguration.Companion.CIRCUIT_BREAKER_ID
 import no.fdk.harvester.kafka.KafkaManager
+import no.fdk.harvester.metrics.HarvestMetrics
 import no.fdk.harvester.metrics.KafkaHarvestMetrics
+import no.fdk.harvester.metrics.ResourceEventMetrics
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.BeforeEach
@@ -24,6 +26,10 @@ class CircuitBreakerConsumerConfigurationTest {
     fun setUpMetrics() {
         meterRegistry = SimpleMeterRegistry()
         Metrics.addRegistry(meterRegistry)
+        HarvestMetrics.bind(Metrics.globalRegistry)
+        KafkaHarvestMetrics.bind(Metrics.globalRegistry)
+        ResourceEventMetrics.bind(Metrics.globalRegistry)
+        KafkaHarvestMetrics.registerListenerPausedGauge()
     }
 
     @AfterEach

@@ -1,5 +1,6 @@
 package no.fdk.harvester.metrics
 
+import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Metrics
 import no.fdk.harvest.DataType
 import no.fdk.harvester.error.HarvestErrorCategory
@@ -8,6 +9,12 @@ import kotlin.time.Duration
 import kotlin.time.toJavaDuration
 
 object HarvestMetrics {
+    private var registry: MeterRegistry = Metrics.globalRegistry
+
+    fun bind(registry: MeterRegistry) {
+        this.registry = registry
+    }
+
     fun record(
         report: HarvestReport?,
         dataType: DataType,
@@ -20,7 +27,7 @@ object HarvestMetrics {
         val forceUpdateLabel = "$forceUpdate"
         val success = report?.harvestError == false
 
-        Metrics
+        registry
             .counter(
                 "harvest_count",
                 "status",
@@ -43,7 +50,7 @@ object HarvestMetrics {
         }
 
         if (success && report != null) {
-            Metrics
+            registry
                 .counter(
                     "harvest_changed_resources_count",
                     "type",
@@ -55,7 +62,7 @@ object HarvestMetrics {
                     "datasource_url",
                     dataSourceUrl,
                 ).increment(report.changedResources.size.toDouble())
-            Metrics
+            registry
                 .counter(
                     "harvest_removed_resources_count",
                     "type",
@@ -67,7 +74,7 @@ object HarvestMetrics {
                     "datasource_url",
                     dataSourceUrl,
                 ).increment(report.removedResources.size.toDouble())
-            Metrics
+            registry
                 .timer(
                     "harvest_time",
                     "type",
@@ -89,7 +96,7 @@ object HarvestMetrics {
         dataSourceUrl: String?,
         category: HarvestErrorCategory,
     ) {
-        Metrics
+        registry
             .counter(
                 "harvest_count",
                 "status",
@@ -110,7 +117,7 @@ object HarvestMetrics {
         category: HarvestErrorCategory,
         dataType: DataType,
     ) {
-        Metrics
+        registry
             .counter(
                 "harvest_error_count",
                 "category",

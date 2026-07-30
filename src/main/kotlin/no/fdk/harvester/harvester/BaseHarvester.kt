@@ -107,12 +107,30 @@ abstract class BaseHarvester(
     ): HarvestReport? {
         if (source.id == null || source.url == null) {
             logger.error("Harvest source is not valid")
-            return null
+            return HarvestReportBuilder.createValidationErrorReport(
+                dataType = dataType,
+                runId = runId,
+                harvestDate = harvestDate,
+                sourceId = source.id,
+                sourceUrl = source.url,
+            )
         }
 
         if (requiresAcceptHeader && source.acceptHeaderValue == null) {
             logger.error("Harvest source missing acceptHeaderValue")
-            return null
+            return HarvestReportBuilder.createErrorReport(
+                dataType = dataType,
+                source = source,
+                errorMessage =
+                    HarvestErrorMessageMapper.toUserMessage(
+                        category = HarvestErrorCategory.VALIDATION_ERROR,
+                        dataSourceUrl = source.url,
+                        dataType = null,
+                    ),
+                errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
+                harvestDate = harvestDate,
+                runId = runId,
+            )
         }
 
         return try {

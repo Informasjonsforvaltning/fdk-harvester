@@ -21,6 +21,7 @@ class HarvestMetricsTest {
     fun setUp() {
         registry = SimpleMeterRegistry()
         Metrics.addRegistry(registry)
+        HarvestMetrics.bind(Metrics.globalRegistry)
     }
 
     @AfterEach

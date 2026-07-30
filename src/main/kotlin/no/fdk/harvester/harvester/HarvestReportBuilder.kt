@@ -1,6 +1,7 @@
 package no.fdk.harvester.harvester
 
 import no.fdk.harvester.error.HarvestErrorCategory
+import no.fdk.harvester.error.HarvestErrorMessageMapper
 import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestReport
@@ -73,4 +74,29 @@ object HarvestReportBuilder {
             endTime = formatNowWithOsloTimeZone(),
         )
     }
+
+    /** Creates a validation error report when required source fields are missing. */
+    fun createValidationErrorReport(
+        dataType: String,
+        runId: String,
+        harvestDate: Calendar,
+        sourceId: String?,
+        sourceUrl: String?,
+    ): HarvestReport =
+        HarvestReport(
+            runId = runId,
+            dataSourceId = sourceId ?: "",
+            dataSourceUrl = sourceUrl,
+            dataType = dataType,
+            harvestError = true,
+            errorMessage =
+                HarvestErrorMessageMapper.toUserMessage(
+                    category = HarvestErrorCategory.VALIDATION_ERROR,
+                    dataSourceUrl = sourceUrl,
+                    dataType = null,
+                ),
+            errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
+            startTime = harvestDate.formatWithOsloTimeZone(),
+            endTime = formatNowWithOsloTimeZone(),
+        )
 }

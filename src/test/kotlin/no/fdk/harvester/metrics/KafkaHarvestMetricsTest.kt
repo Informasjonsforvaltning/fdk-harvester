@@ -18,6 +18,7 @@ class KafkaHarvestMetricsTest {
     fun setUp() {
         registry = SimpleMeterRegistry()
         Metrics.addRegistry(registry)
+        KafkaHarvestMetrics.bind(Metrics.globalRegistry)
     }
 
     @AfterEach
@@ -31,7 +32,7 @@ class KafkaHarvestMetricsTest {
     fun `recordEventProcessed increments harvest_event_processing_total`() {
         KafkaHarvestMetrics.recordEventProcessed(
             HarvestPhase.INITIATING,
-            KafkaHarvestMetrics.EventProcessingResult.SUCCESS,
+            KafkaHarvestMetrics.EventProcessingResult.ACKED,
         )
         KafkaHarvestMetrics.recordEventProcessed(
             HarvestPhase.HARVESTING,
@@ -39,7 +40,7 @@ class KafkaHarvestMetricsTest {
         )
         KafkaHarvestMetrics.recordEventProcessed(
             HarvestPhase.REMOVING,
-            KafkaHarvestMetrics.EventProcessingResult.ERROR,
+            KafkaHarvestMetrics.EventProcessingResult.NACKED,
         )
 
         assertEquals(
@@ -50,7 +51,7 @@ class KafkaHarvestMetricsTest {
                     "phase",
                     "initiating",
                     "result",
-                    "success",
+                    "acked",
                 ).count(),
         )
         assertEquals(
@@ -72,13 +73,21 @@ class KafkaHarvestMetricsTest {
                     "phase",
                     "removing",
                     "result",
-                    "error",
+                    "nacked",
                 ).count(),
         )
     }
 
     @Test
+    fun `registerListenerPausedGauge exposes gauge before first state change`() {
+        KafkaHarvestMetrics.registerListenerPausedGauge()
+
+        assertEquals(0.0, registry.find("kafka_listener_paused").gauge()?.value())
+    }
+
+    @Test
     fun `setListenerPaused updates kafka_listener_paused gauge`() {
+        KafkaHarvestMetrics.registerListenerPausedGauge()
         KafkaHarvestMetrics.setListenerPaused(true)
         assertEquals(1.0, registry.find("kafka_listener_paused").gauge()?.value())
 

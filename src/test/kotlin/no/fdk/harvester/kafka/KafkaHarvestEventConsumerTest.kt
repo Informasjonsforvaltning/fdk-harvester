@@ -1,5 +1,7 @@
 package no.fdk.harvester.kafka
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
+import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.micrometer.core.instrument.Metrics
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.mockk.every
@@ -8,7 +10,9 @@ import io.mockk.verify
 import no.fdk.harvest.DataType
 import no.fdk.harvest.HarvestEvent
 import no.fdk.harvest.HarvestPhase
+import no.fdk.harvester.metrics.HarvestMetrics
 import no.fdk.harvester.metrics.KafkaHarvestMetrics
+import no.fdk.harvester.metrics.ResourceEventMetrics
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
@@ -30,6 +34,9 @@ class KafkaHarvestEventConsumerTest {
     fun setUpMetrics() {
         meterRegistry = SimpleMeterRegistry()
         Metrics.addRegistry(meterRegistry)
+        HarvestMetrics.bind(Metrics.globalRegistry)
+        KafkaHarvestMetrics.bind(Metrics.globalRegistry)
+        ResourceEventMetrics.bind(Metrics.globalRegistry)
     }
 
     @AfterEach
@@ -103,6 +110,42 @@ class KafkaHarvestEventConsumerTest {
     }
 
     @Test
+    fun `consumeHarvestEvent nacks on circuit breaker open`() {
+        val event =
+            HarvestEvent
+                .newBuilder()
+                .setPhase(HarvestPhase.INITIATING)
+                .setRunId("run-1")
+                .setDataType(DataType.dataset)
+                .setDataSourceId("source-1")
+                .setDataSourceUrl("http://example.org/source")
+                .setAcceptHeader("text/turtle")
+                .setForced(false)
+                .build()
+        val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
+
+        every { circuitBreaker.process(any()) } throws
+            CallNotPermittedException.createCallNotPermittedException(CircuitBreaker.ofDefaults("test"))
+
+        consumer.consumeHarvestEvent(record, ack)
+
+        verify(exactly = 1) { circuitBreaker.process(record) }
+        verify(exactly = 1) { ack.nack(Duration.ZERO) }
+        verify(exactly = 0) { ack.acknowledge() }
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_event_processing_total",
+                    "phase",
+                    "initiating",
+                    "result",
+                    "circuit_open",
+                ).count(),
+        )
+    }
+
+    @Test
     fun `consumeHarvestEvent nacks on processing error`() {
         val event =
             HarvestEvent
@@ -132,7 +175,7 @@ class KafkaHarvestEventConsumerTest {
                     "phase",
                     "initiating",
                     "result",
-                    "error",
+                    "nacked",
                 ).count(),
         )
     }

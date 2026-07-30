@@ -1,5 +1,6 @@
 package no.fdk.harvester.kafka
 
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException
 import no.fdk.harvest.HarvestEvent
 import no.fdk.harvest.HarvestPhase
 import no.fdk.harvester.metrics.KafkaHarvestMetrics
@@ -48,11 +49,17 @@ class KafkaHarvestEventConsumer(
 
         try {
             circuitBreaker.process(record)
-            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.SUCCESS)
+            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.ACKED)
             ack.acknowledge()
+        } catch (e: CallNotPermittedException) {
+            logger().warn(
+                "Circuit breaker open, rejecting harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}",
+            )
+            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.CIRCUIT_OPEN)
+            ack.nack(Duration.ZERO)
         } catch (e: Exception) {
             logger().error("Error processing harvest event for dataSourceId: ${event.dataSourceId}, dataType: ${event.dataType}", e)
-            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.ERROR)
+            KafkaHarvestMetrics.recordEventProcessed(event.phase, EventProcessingResult.NACKED)
             ack.nack(Duration.ZERO)
         }
     }

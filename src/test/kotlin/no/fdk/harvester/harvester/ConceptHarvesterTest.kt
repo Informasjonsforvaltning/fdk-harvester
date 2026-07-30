@@ -43,7 +43,7 @@ class ConceptHarvesterTest {
     }
 
     @Test
-    fun `test harvestConceptCollection with invalid source returns null`() {
+    fun `test harvestConceptCollection with invalid source returns validation error report`() {
         val source =
             HarvestDataSource(
                 id = null,
@@ -54,11 +54,12 @@ class ConceptHarvesterTest {
 
         val report = conceptHarvester.harvestConceptCollection(source, harvestDate, false, "run-123")
 
-        assertNull(report)
+        assertNotNull(report)
+        assertTrue(report!!.harvestError)
     }
 
     @Test
-    fun `test harvestConceptCollection with missing accept header returns null`() {
+    fun `test harvestConceptCollection with missing accept header returns validation error report`() {
         val source =
             HarvestDataSource(
                 id = "source-1",
@@ -69,7 +70,8 @@ class ConceptHarvesterTest {
 
         val report = conceptHarvester.harvestConceptCollection(source, harvestDate, false, "run-123")
 
-        assertNull(report)
+        assertNotNull(report)
+        assertTrue(report!!.harvestError)
     }
 
     @Test

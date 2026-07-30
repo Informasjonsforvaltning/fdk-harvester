@@ -1,6 +1,8 @@
 package no.fdk.harvester.service
 
 import no.fdk.harvest.DataType
+import no.fdk.harvester.error.HarvestErrorCategory
+import no.fdk.harvester.error.HarvestErrorMessageMapper
 import no.fdk.harvester.harvester.ConceptHarvester
 import no.fdk.harvester.harvester.DataServiceHarvester
 import no.fdk.harvester.harvester.DatasetHarvester
@@ -128,6 +130,21 @@ open class HarvestService(
                             runId,
                         )
                     }
+                } ?: run {
+                    logger.warn("No harvester configured for dataType: $dataType")
+                    HarvestReportBuilder.createErrorReport(
+                        dataType = dataType.name.lowercase(),
+                        source = dataSource,
+                        errorMessage =
+                            HarvestErrorMessageMapper.toUserMessage(
+                                category = HarvestErrorCategory.INTERNAL_ERROR,
+                                dataSourceUrl = dataSourceUrl,
+                                dataType = dataType,
+                            ),
+                        errorCategory = HarvestErrorCategory.INTERNAL_ERROR,
+                        harvestDate = harvestDate,
+                        runId = runId,
+                    )
                 }
 
             logger.debug("Completed harvest for dataSourceId: $dataSourceId, dataType: $dataType")
