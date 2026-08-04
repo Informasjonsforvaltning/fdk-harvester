@@ -1,6 +1,7 @@
 package no.fdk.harvester.error
 
 import no.fdk.harvest.DataType
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
@@ -68,6 +69,23 @@ class HarvestErrorMessageMapperTest {
 
         assertTrue(msg.contains("already harvested", ignoreCase = true))
         assertTrue(msg.contains("cannot be harvested", ignoreCase = true))
+    }
+
+    @Test
+    fun `source conflict message includes original error details`() {
+        val originalError =
+            "Resource https://dataut.vegvesen.no/ already exists and was harvested from " +
+                "https://dataut.vegvesen.no/catalog.ttl. Cannot harvest from different source " +
+                "https://dataut.vegvesen.no/api-catalog.ttl"
+        val msg =
+            HarvestErrorMessageMapper.toUserMessage(
+                category = HarvestErrorCategory.SOURCE_CONFLICT,
+                dataSourceUrl = "https://dataut.vegvesen.no/api-catalog.ttl",
+                dataType = DataType.dataset,
+                originalError = originalError,
+            )
+
+        assertEquals(originalError, msg)
     }
 
     @Test

@@ -40,7 +40,11 @@ object HarvestErrorMessageMapper {
             }
 
             HarvestErrorCategory.SOURCE_CONFLICT -> {
-                "This resource is already harvested from another data source and cannot be harvested from the current source."
+                originalError?.takeIf { it.isNotBlank() }
+                    ?: (
+                        "A resource present in the source is already harvested from another data source " +
+                            "and cannot be harvested from the current source."
+                    )
             }
 
             HarvestErrorCategory.INTERNAL_ERROR -> {
