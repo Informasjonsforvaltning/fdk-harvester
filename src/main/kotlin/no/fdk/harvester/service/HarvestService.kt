@@ -136,11 +136,11 @@ open class HarvestService(
                         dataType = dataType.name.lowercase(),
                         source = dataSource,
                         errorMessage =
-                            HarvestErrorMessageMapper.toUserMessage(
-                                category = HarvestErrorCategory.INTERNAL_ERROR,
-                                dataSourceUrl = dataSourceUrl,
-                                dataType = dataType,
-                            ),
+                        HarvestErrorMessageMapper.toUserMessage(
+                            category = HarvestErrorCategory.INTERNAL_ERROR,
+                            dataSourceUrl = dataSourceUrl,
+                            dataType = dataType,
+                        ),
                         errorCategory = HarvestErrorCategory.INTERNAL_ERROR,
                         harvestDate = harvestDate,
                         runId = runId,
@@ -171,12 +171,7 @@ open class HarvestService(
      * @return HarvestReport containing information about the deletion operation
      */
     @Transactional
-    override fun markResourcesAsDeleted(
-        sourceUrl: String,
-        dataType: DataType,
-        dataSourceId: String,
-        runId: String,
-    ): HarvestReport {
+    override fun markResourcesAsDeleted(sourceUrl: String, dataType: DataType, dataSourceId: String, runId: String): HarvestReport {
         logger.debug("Marking resources as deleted for sourceUrl: $sourceUrl, dataType: $dataType")
 
         val harvestSource =
@@ -194,7 +189,7 @@ open class HarvestService(
                         matchesDataType(resource.type, dataType) ||
                             resource.type == ResourceType.CATALOG ||
                             resource.type == ResourceType.COLLECTION
-                    )
+                        )
             }
 
         val removedResources =
@@ -251,39 +246,31 @@ open class HarvestService(
         )
     }
 
-    private fun markRemoved(
-        resource: ResourceEntity,
-        modified: Instant,
-    ): ResourceEntity =
-        resourceRepository.save(
-            ResourceEntity(
-                uri = resource.uri,
-                type = resource.type,
-                fdkId = resource.fdkId,
-                removed = true,
-                issued = resource.issued,
-                modified = modified,
-                checksum = resource.checksum,
-                harvestSource = resource.harvestSource,
-            ),
-        )
+    private fun markRemoved(resource: ResourceEntity, modified: Instant): ResourceEntity = resourceRepository.save(
+        ResourceEntity(
+            uri = resource.uri,
+            type = resource.type,
+            fdkId = resource.fdkId,
+            removed = true,
+            issued = resource.issued,
+            modified = modified,
+            checksum = resource.checksum,
+            harvestSource = resource.harvestSource,
+        ),
+    )
 
     /**
      * Checks if a ResourceType matches the given DataType.
      * CATALOG and COLLECTION are metadata types and don't match any DataType.
      */
-    private fun matchesDataType(
-        resourceType: ResourceType,
-        dataType: DataType,
-    ): Boolean =
-        when (dataType) {
-            DataType.concept -> resourceType == ResourceType.CONCEPT
-            DataType.dataset -> resourceType == ResourceType.DATASET
-            DataType.dataservice -> resourceType == ResourceType.DATASERVICE
-            DataType.informationmodel -> resourceType == ResourceType.INFORMATIONMODEL
-            DataType.service, DataType.publicService -> resourceType == ResourceType.SERVICE
-            DataType.event -> resourceType == ResourceType.EVENT
-        }
+    private fun matchesDataType(resourceType: ResourceType, dataType: DataType): Boolean = when (dataType) {
+        DataType.concept -> resourceType == ResourceType.CONCEPT
+        DataType.dataset -> resourceType == ResourceType.DATASET
+        DataType.dataservice -> resourceType == ResourceType.DATASERVICE
+        DataType.informationmodel -> resourceType == ResourceType.INFORMATIONMODEL
+        DataType.service, DataType.publicService -> resourceType == ResourceType.SERVICE
+        DataType.event -> resourceType == ResourceType.EVENT
+    }
 
     companion object {
         private val logger: Logger = LoggerFactory.getLogger(HarvestService::class.java)

@@ -83,15 +83,15 @@ class HarvestEventProducerTest {
                 errorMessage = null,
                 changedCatalogs = emptyList(),
                 changedResources =
-                    listOf(
-                        no.fdk.harvester.model
-                            .FdkIdAndUri("fdk-1", "http://example.org/d1"),
-                    ),
+                listOf(
+                    no.fdk.harvester.model
+                        .FdkIdAndUri("fdk-1", "http://example.org/d1"),
+                ),
                 removedResources =
-                    listOf(
-                        no.fdk.harvester.model
-                            .FdkIdAndUri("fdk-2", "http://example.org/d2"),
-                    ),
+                listOf(
+                    no.fdk.harvester.model
+                        .FdkIdAndUri("fdk-2", "http://example.org/d2"),
+                ),
             )
 
         val initiating =

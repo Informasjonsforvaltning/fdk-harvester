@@ -19,28 +19,21 @@ object HarvestReportBuilder {
         changedResources: List<FdkIdAndUri>,
         removedResources: List<FdkIdAndUri>,
         runId: String,
-    ): HarvestReport =
-        HarvestReport(
-            runId = runId,
-            dataSourceId = sourceId,
-            dataSourceUrl = sourceUrl,
-            dataType = dataType,
-            harvestError = false,
-            startTime = harvestDate.formatWithOsloTimeZone(),
-            endTime = formatNowWithOsloTimeZone(),
-            changedCatalogs = changedCatalogs,
-            changedResources = changedResources,
-            removedResources = removedResources,
-        )
+    ): HarvestReport = HarvestReport(
+        runId = runId,
+        dataSourceId = sourceId,
+        dataSourceUrl = sourceUrl,
+        dataType = dataType,
+        harvestError = false,
+        startTime = harvestDate.formatWithOsloTimeZone(),
+        endTime = formatNowWithOsloTimeZone(),
+        changedCatalogs = changedCatalogs,
+        changedResources = changedResources,
+        removedResources = removedResources,
+    )
 
     /** Creates a report when no resources were changed or removed. */
-    fun createNoChangeReport(
-        dataType: String,
-        sourceId: String,
-        sourceUrl: String,
-        harvestDate: Calendar,
-        runId: String,
-    ): HarvestReport =
+    fun createNoChangeReport(dataType: String, sourceId: String, sourceUrl: String, harvestDate: Calendar, runId: String): HarvestReport =
         HarvestReport(
             runId = runId,
             dataSourceId = sourceId,
@@ -82,21 +75,20 @@ object HarvestReportBuilder {
         harvestDate: Calendar,
         sourceId: String?,
         sourceUrl: String?,
-    ): HarvestReport =
-        HarvestReport(
-            runId = runId,
-            dataSourceId = sourceId ?: "",
+    ): HarvestReport = HarvestReport(
+        runId = runId,
+        dataSourceId = sourceId ?: "",
+        dataSourceUrl = sourceUrl,
+        dataType = dataType,
+        harvestError = true,
+        errorMessage =
+        HarvestErrorMessageMapper.toUserMessage(
+            category = HarvestErrorCategory.VALIDATION_ERROR,
             dataSourceUrl = sourceUrl,
-            dataType = dataType,
-            harvestError = true,
-            errorMessage =
-                HarvestErrorMessageMapper.toUserMessage(
-                    category = HarvestErrorCategory.VALIDATION_ERROR,
-                    dataSourceUrl = sourceUrl,
-                    dataType = null,
-                ),
-            errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
-            startTime = harvestDate.formatWithOsloTimeZone(),
-            endTime = formatNowWithOsloTimeZone(),
-        )
+            dataType = null,
+        ),
+        errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
+        startTime = harvestDate.formatWithOsloTimeZone(),
+        endTime = formatNowWithOsloTimeZone(),
+    )
 }

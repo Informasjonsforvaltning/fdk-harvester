@@ -125,12 +125,11 @@ class ResourceRepositoryTest {
         assertTrue(found.all { it.fdkId == "fdk-123" })
     }
 
-    private fun createHarvestSource(uri: String): HarvestSourceEntity =
-        HarvestSourceEntity(
-            uri = uri,
-            checksum = "checksum-123",
-            issued = java.time.Instant.now(),
-        )
+    private fun createHarvestSource(uri: String): HarvestSourceEntity = HarvestSourceEntity(
+        uri = uri,
+        checksum = "checksum-123",
+        issued = java.time.Instant.now(),
+    )
 
     private fun createResource(
         uri: String,
@@ -138,15 +137,14 @@ class ResourceRepositoryTest {
         harvestSource: HarvestSourceEntity,
         fdkId: String = "fdk-$uri",
         removed: Boolean = false,
-    ): ResourceEntity =
-        ResourceEntity(
-            uri = uri,
-            type = type,
-            fdkId = fdkId,
-            removed = removed,
-            issued = java.time.Instant.now(),
-            modified = java.time.Instant.now(),
-            checksum = "checksum-$uri",
-            harvestSource = harvestSource,
-        )
+    ): ResourceEntity = ResourceEntity(
+        uri = uri,
+        type = type,
+        fdkId = fdkId,
+        removed = removed,
+        issued = java.time.Instant.now(),
+        modified = java.time.Instant.now(),
+        checksum = "checksum-$uri",
+        harvestSource = harvestSource,
+    )
 }

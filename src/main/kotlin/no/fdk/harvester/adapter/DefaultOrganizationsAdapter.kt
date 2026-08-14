@@ -17,9 +17,7 @@ private val logger = LoggerFactory.getLogger(DefaultOrganizationsAdapter::class.
 
 /** HTTP-based implementation of [OrganizationsAdapter] using [ApplicationProperties.organizationsUri]. */
 @Service
-class DefaultOrganizationsAdapter(
-    private val applicationProperties: ApplicationProperties,
-) : OrganizationsAdapter {
+class DefaultOrganizationsAdapter(private val applicationProperties: ApplicationProperties) : OrganizationsAdapter {
     override fun getOrganization(id: String): Organization? {
         val uri = "${applicationProperties.organizationsUri}/$id"
         with(URI(uri).toURL().openConnection() as HttpURLConnection) {

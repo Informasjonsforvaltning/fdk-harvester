@@ -113,10 +113,7 @@ object HarvestMetrics {
         recordErrorCount(category = category, dataType = dataType)
     }
 
-    fun recordErrorCount(
-        category: HarvestErrorCategory,
-        dataType: DataType,
-    ) {
+    fun recordErrorCount(category: HarvestErrorCategory, dataType: DataType) {
         registry
             .counter(
                 "harvest_error_count",
@@ -127,10 +124,9 @@ object HarvestMetrics {
             ).increment()
     }
 
-    fun metricType(dataType: DataType): String =
-        when (dataType) {
-            DataType.informationmodel -> "information-model"
-            DataType.publicService, DataType.service -> "public-service"
-            else -> dataType.name
-        }
+    fun metricType(dataType: DataType): String = when (dataType) {
+        DataType.informationmodel -> "information-model"
+        DataType.publicService, DataType.service -> "public-service"
+        else -> dataType.name
+    }
 }

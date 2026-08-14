@@ -11,10 +11,7 @@ import org.springframework.context.annotation.Configuration
 
 /** Binds Resilience4j circuit breaker metrics and custom harvest metrics to the application [MeterRegistry]. */
 @Configuration
-open class MetricsConfiguration(
-    private val circuitBreakerRegistry: CircuitBreakerRegistry,
-    private val meterRegistry: MeterRegistry,
-) {
+open class MetricsConfiguration(private val circuitBreakerRegistry: CircuitBreakerRegistry, private val meterRegistry: MeterRegistry) {
     @PostConstruct
     fun bindMetrics() {
         HarvestMetrics.bind(meterRegistry)

@@ -31,11 +31,7 @@ import java.util.Calendar
 import no.fdk.harvest.DataType as HarvestDataType
 
 /** A harvested member resource before catalog-record attachment. */
-data class MemberRDFModel(
-    val resourceURI: String,
-    val harvested: Model,
-    val isMemberOfAnyContainer: Boolean,
-)
+data class MemberRDFModel(val resourceURI: String, val harvested: Model, val isMemberOfAnyContainer: Boolean)
 
 /** A DCAT catalog or SKOS collection and its member URIs extracted from the source RDF. */
 data class ContainerRDFModel(
@@ -142,11 +138,11 @@ abstract class ResourceHarvester(
                 resourceGraphs = updateResult.resourceGraphs,
                 runId = runId,
                 catalogGraphs =
-                    catalogGraphsForUpdatedMembers(
-                        updateResult.updatedMembers,
-                        containers,
-                        updateResult.metaRecordModels,
-                    ),
+                catalogGraphsForUpdatedMembers(
+                    updateResult.updatedMembers,
+                    containers,
+                    updateResult.metaRecordModels,
+                ),
             )
         }
 
@@ -161,10 +157,7 @@ abstract class ResourceHarvester(
         return report
     }
 
-    protected open fun resolveOrganization(
-        source: HarvestDataSource,
-        members: List<MemberRDFModel>,
-    ): Organization? {
+    protected open fun resolveOrganization(source: HarvestDataSource, members: List<MemberRDFModel>): Organization? {
         val publisherId = source.publisherId ?: return null
         return if (members.any { !it.isMemberOfAnyContainer }) {
             orgAdapter.getOrganization(publisherId)
@@ -173,10 +166,7 @@ abstract class ResourceHarvester(
         }
     }
 
-    protected abstract fun listMembers(
-        harvested: Model,
-        sourceURL: String,
-    ): List<MemberRDFModel>
+    protected abstract fun listMembers(harvested: Model, sourceURL: String): List<MemberRDFModel>
 
     protected abstract fun extractContainers(
         harvested: Model,
@@ -266,11 +256,11 @@ abstract class ResourceHarvester(
                                 modified = meta.modified,
                                 fdkUriBase = harvestConfig.fdkResourceUriBase,
                                 missingParentLogMessage =
-                                    if (parentFdkUri == null) {
-                                        harvestConfig.missingParentLogMessage(meta.uri)
-                                    } else {
-                                        null
-                                    },
+                                if (parentFdkUri == null) {
+                                    harvestConfig.missingParentLogMessage(meta.uri)
+                                } else {
+                                    null
+                                },
                             )
 
                         val graphString = member.harvested.createRDFResponse(Lang.TURTLE)
@@ -378,11 +368,7 @@ abstract class ResourceHarvester(
         )
     }
 
-    protected fun createModelForGeneratedContainer(
-        containerURI: String,
-        memberUris: Set<String>,
-        organization: Organization?,
-    ): Model {
+    protected fun createModelForGeneratedContainer(containerURI: String, memberUris: Set<String>, organization: Organization?): Model {
         val catalogModel = ModelFactory.createDefaultModel()
         catalogModel
             .createResource(containerURI)
@@ -419,23 +405,19 @@ abstract class ResourceHarvester(
         )
     }
 
-    protected fun Model.addContainerProperties(
-        property: Statement,
-        memberLinkProperty: Property,
-    ): Model =
-        when {
-            property.predicate != memberLinkProperty && property.isResourceProperty() -> {
-                add(property).recursiveAddNonMemberResource(property.resource)
-            }
-
-            property.predicate != memberLinkProperty -> {
-                add(property)
-            }
-
-            else -> {
-                this
-            }
+    protected fun Model.addContainerProperties(property: Statement, memberLinkProperty: Property): Model = when {
+        property.predicate != memberLinkProperty && property.isResourceProperty() -> {
+            add(property).recursiveAddNonMemberResource(property.resource)
         }
+
+        property.predicate != memberLinkProperty -> {
+            add(property)
+        }
+
+        else -> {
+            this
+        }
+    }
 
     protected fun Model.recursiveAddNonMemberResource(resource: Resource): Model {
         val types = resource.listProperties(RDF.type).toList().map { it.`object` }
@@ -481,21 +463,13 @@ abstract class ResourceHarvester(
      * present in the target model. The URI-presence check both de-duplicates and breaks cycles
      * (e.g. a resource referencing itself via dct:identifier).
      */
-    private fun Model.shouldAddToTargetModel(
-        resource: Resource,
-        types: List<RDFNode>,
-    ): Boolean =
-        when {
-            isSeparatelyHarvestedMemberType(types) -> false
-            resource.isURIResource && containsTriple("<${resource.uri}>", "?p", "?o") -> false
-            else -> true
-        }
+    private fun Model.shouldAddToTargetModel(resource: Resource, types: List<RDFNode>): Boolean = when {
+        isSeparatelyHarvestedMemberType(types) -> false
+        resource.isURIResource && containsTriple("<${resource.uri}>", "?p", "?o") -> false
+        else -> true
+    }
 
-    protected open fun postProcessMemberModel(
-        model: Model,
-        resource: Resource,
-        types: List<RDFNode>,
-    ) {}
+    protected open fun postProcessMemberModel(model: Model, resource: Resource, types: List<RDFNode>) {}
 
     /**
      * Whether [types] identifies a resource that is harvested as its own member (and therefore must

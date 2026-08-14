@@ -153,10 +153,8 @@ class BaseHarvesterTest {
     }
 
     // Test implementation of BaseHarvester for testing
-    private class TestHarvester(
-        harvestSourceRepository: HarvestSourceRepository,
-        resourceRepository: ResourceRepository,
-    ) : BaseHarvester(harvestSourceRepository, resourceRepository) {
+    private class TestHarvester(harvestSourceRepository: HarvestSourceRepository, resourceRepository: ResourceRepository) :
+        BaseHarvester(harvestSourceRepository, resourceRepository) {
         override fun updateDB(
             harvested: org.apache.jena.rdf.model.Model,
             source: HarvestDataSource,
@@ -165,29 +163,22 @@ class BaseHarvesterTest {
             runId: String,
             dataType: String,
             harvestSource: HarvestSourceEntity,
-        ): HarvestReport =
-            HarvestReportBuilder.createSuccessReport(
-                dataType = dataType,
-                sourceId = source.id!!,
-                sourceUrl = source.url!!,
-                harvestDate = harvestDate,
-                changedCatalogs = emptyList(),
-                changedResources = emptyList(),
-                removedResources = emptyList(),
-                runId = runId,
-            )
+        ): HarvestReport = HarvestReportBuilder.createSuccessReport(
+            dataType = dataType,
+            sourceId = source.id!!,
+            sourceUrl = source.url!!,
+            harvestDate = harvestDate,
+            changedCatalogs = emptyList(),
+            changedResources = emptyList(),
+            removedResources = emptyList(),
+            runId = runId,
+        )
 
         // Expose protected methods for testing
-        fun testGetOrCreateHarvestSource(
-            uri: String,
-            checksum: String,
-            issued: Instant,
-        ): HarvestSourceEntity = getOrCreateHarvestSource(uri, checksum, issued)
+        fun testGetOrCreateHarvestSource(uri: String, checksum: String, issued: Instant): HarvestSourceEntity =
+            getOrCreateHarvestSource(uri, checksum, issued)
 
-        fun testValidateSourceUrl(
-            resourceUri: String,
-            harvestSource: HarvestSourceEntity,
-            dbResource: ResourceEntity?,
-        ) = validateSourceUrl(resourceUri, harvestSource, dbResource)
+        fun testValidateSourceUrl(resourceUri: String, harvestSource: HarvestSourceEntity, dbResource: ResourceEntity?) =
+            validateSourceUrl(resourceUri, harvestSource, dbResource)
     }
 }

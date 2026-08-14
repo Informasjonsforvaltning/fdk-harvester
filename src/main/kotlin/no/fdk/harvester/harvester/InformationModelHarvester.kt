@@ -31,12 +31,12 @@ class InformationModelHarvester(
     harvestSourceRepository: HarvestSourceRepository,
     resourceEventProducer: ResourceEventProducer,
 ) : ResourceHarvester(
-        harvestSourceRepository,
-        resourceRepository,
-        applicationProperties,
-        orgAdapter,
-        resourceEventProducer,
-    ) {
+    harvestSourceRepository,
+    resourceRepository,
+    applicationProperties,
+    orgAdapter,
+    resourceEventProducer,
+) {
     fun harvestInformationModelCatalog(
         source: HarvestDataSource,
         harvestDate: Calendar,
@@ -61,36 +61,27 @@ class InformationModelHarvester(
 
     override fun memberLinkProperty(): Property = ModellDCATAPNO.model
 
-    override fun listMembers(
-        harvested: Model,
-        sourceURL: String,
-    ): List<MemberRDFModel> =
-        harvested
-            .listResourcesWithProperty(RDF.type, ModellDCATAPNO.InformationModel)
-            .toList()
-            .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(memberLinkProperty()) }
+    override fun listMembers(harvested: Model, sourceURL: String): List<MemberRDFModel> = harvested
+        .listResourcesWithProperty(RDF.type, ModellDCATAPNO.InformationModel)
+        .toList()
+        .excludeBlankNodes(sourceURL)
+        .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
         members: List<MemberRDFModel>,
         sourceURL: String,
         organization: Organization?,
-    ): List<ContainerRDFModel> =
-        extractContainersWithOrphans(
-            harvested = harvested,
-            members = members,
-            sourceURL = sourceURL,
-            organization = organization,
-        )
+    ): List<ContainerRDFModel> = extractContainersWithOrphans(
+        harvested = harvested,
+        members = members,
+        sourceURL = sourceURL,
+        organization = organization,
+    )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(ModellDCATAPNO.InformationModel)
 
-    override fun postProcessMemberModel(
-        model: Model,
-        resource: Resource,
-        types: List<RDFNode>,
-    ) {
+    override fun postProcessMemberModel(model: Model, resource: Resource, types: List<RDFNode>) {
         if (types.contains(ModellDCATAPNO.CodeList)) {
             model.addCodeElementsAssociatedWithCodeList(resource)
         }

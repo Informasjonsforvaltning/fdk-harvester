@@ -32,18 +32,14 @@ class ServiceHarvester(
     harvestSourceRepository: HarvestSourceRepository,
     resourceEventProducer: ResourceEventProducer,
 ) : ResourceHarvester(
-        harvestSourceRepository,
-        resourceRepository,
-        applicationProperties,
-        orgAdapter,
-        resourceEventProducer,
-    ) {
-    fun harvestServices(
-        source: HarvestDataSource,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        runId: String,
-    ): HarvestReport? = validateAndHarvest(source, harvestDate, forceUpdate, runId, "service", requiresAcceptHeader = true)
+    harvestSourceRepository,
+    resourceRepository,
+    applicationProperties,
+    orgAdapter,
+    resourceEventProducer,
+) {
+    fun harvestServices(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+        validateAndHarvest(source, harvestDate, forceUpdate, runId, "service", requiresAcceptHeader = true)
 
     override val harvestConfig =
         ResourceHarvestConfig(
@@ -62,40 +58,30 @@ class ServiceHarvester(
 
     override fun memberLinkProperty(): Property = DCATNO.containsService
 
-    override fun listMembers(
-        harvested: Model,
-        sourceURL: String,
-    ): List<MemberRDFModel> =
-        harvested
-            .listResourcesWithServiceType()
-            .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(memberLinkProperty()) }
+    override fun listMembers(harvested: Model, sourceURL: String): List<MemberRDFModel> = harvested
+        .listResourcesWithServiceType()
+        .excludeBlankNodes(sourceURL)
+        .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
         members: List<MemberRDFModel>,
         sourceURL: String,
         organization: Organization?,
-    ): List<ContainerRDFModel> =
-        extractContainersWithOrphans(
-            harvested = harvested,
-            members = members,
-            sourceURL = sourceURL,
-            organization = organization,
-        )
+    ): List<ContainerRDFModel> = extractContainersWithOrphans(
+        harvested = harvested,
+        members = members,
+        sourceURL = sourceURL,
+        organization = organization,
+    )
 
-    override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean =
-        types.contains(CPSV.PublicService) ||
-            types.contains(CPSVNO.Service) ||
-            types.contains(CV.Event) ||
-            types.contains(CV.BusinessEvent) ||
-            types.contains(CV.LifeEvent)
+    override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(CPSV.PublicService) ||
+        types.contains(CPSVNO.Service) ||
+        types.contains(CV.Event) ||
+        types.contains(CV.BusinessEvent) ||
+        types.contains(CV.LifeEvent)
 
-    override fun postProcessMemberModel(
-        model: Model,
-        resource: Resource,
-        types: List<RDFNode>,
-    ) {
+    override fun postProcessMemberModel(model: Model, resource: Resource, types: List<RDFNode>) {
         if (types.contains(CV.Participation)) {
             model.addAgentsAssociatedWithParticipation(resource)
         }
