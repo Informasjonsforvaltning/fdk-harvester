@@ -18,9 +18,7 @@ import java.time.Duration
  * events by delegating to [KafkaHarvestEventCircuitBreaker]; other phases are skipped.
  */
 @Component
-class KafkaHarvestEventConsumer(
-    private val circuitBreaker: KafkaHarvestEventCircuitBreakerApi,
-) {
+class KafkaHarvestEventConsumer(private val circuitBreaker: KafkaHarvestEventCircuitBreakerApi) {
     private fun logger(): Logger = LOGGER
 
     @KafkaListener(
@@ -29,10 +27,7 @@ class KafkaHarvestEventConsumer(
         containerFactory = "kafkaListenerContainerFactory",
         id = HARVEST_LISTENER_ID,
     )
-    fun consumeHarvestEvent(
-        record: ConsumerRecord<String, HarvestEvent>,
-        ack: Acknowledgment,
-    ) {
+    fun consumeHarvestEvent(record: ConsumerRecord<String, HarvestEvent>, ack: Acknowledgment) {
         logger().debug("Received harvest event - offset: ${record.offset()}, partition: ${record.partition()}")
 
         val event = record.value()

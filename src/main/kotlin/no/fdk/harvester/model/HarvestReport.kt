@@ -26,7 +26,4 @@ data class HarvestReport(
 /**
  * FDK identifier and URI for a harvested or removed resource.
  */
-data class FdkIdAndUri(
-    val fdkId: String,
-    val uri: String,
-)
+data class FdkIdAndUri(val fdkId: String, val uri: String)

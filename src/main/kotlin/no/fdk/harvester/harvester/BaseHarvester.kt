@@ -122,11 +122,11 @@ abstract class BaseHarvester(
                 dataType = dataType,
                 source = source,
                 errorMessage =
-                    HarvestErrorMessageMapper.toUserMessage(
-                        category = HarvestErrorCategory.VALIDATION_ERROR,
-                        dataSourceUrl = source.url,
-                        dataType = null,
-                    ),
+                HarvestErrorMessageMapper.toUserMessage(
+                    category = HarvestErrorCategory.VALIDATION_ERROR,
+                    dataSourceUrl = source.url,
+                    dataType = null,
+                ),
                 errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
                 harvestDate = harvestDate,
                 runId = runId,
@@ -146,11 +146,11 @@ abstract class BaseHarvester(
                         dataType = dataType,
                         source = source,
                         errorMessage =
-                            HarvestErrorMessageMapper.toUserMessage(
-                                category = HarvestErrorCategory.VALIDATION_ERROR,
-                                dataSourceUrl = source.url,
-                                dataType = null,
-                            ),
+                        HarvestErrorMessageMapper.toUserMessage(
+                            category = HarvestErrorCategory.VALIDATION_ERROR,
+                            dataSourceUrl = source.url,
+                            dataType = null,
+                        ),
                         errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
                         harvestDate = harvestDate,
                         runId = runId,
@@ -166,11 +166,11 @@ abstract class BaseHarvester(
                         dataType = dataType,
                         source = source,
                         errorMessage =
-                            HarvestErrorMessageMapper.toUserMessage(
-                                category = HarvestErrorCategory.VALIDATION_ERROR,
-                                dataSourceUrl = source.url,
-                                dataType = null,
-                            ),
+                        HarvestErrorMessageMapper.toUserMessage(
+                            category = HarvestErrorCategory.VALIDATION_ERROR,
+                            dataSourceUrl = source.url,
+                            dataType = null,
+                        ),
                         errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
                         harvestDate = harvestDate,
                         runId = runId,
@@ -204,12 +204,12 @@ abstract class BaseHarvester(
                 dataType = dataType,
                 source = source,
                 errorMessage =
-                    HarvestErrorMessageMapper.toUserMessage(
-                        category = category,
-                        dataSourceUrl = source.url,
-                        dataType = null,
-                        originalError = ex.message,
-                    ),
+                HarvestErrorMessageMapper.toUserMessage(
+                    category = category,
+                    dataSourceUrl = source.url,
+                    dataType = null,
+                    originalError = ex.message,
+                ),
                 errorCategory = category,
                 harvestDate = harvestDate,
                 runId = runId,
@@ -222,11 +222,7 @@ abstract class BaseHarvester(
      * If it exists, returns it as-is (HarvestSource is immutable).
      * If not, creates a new one.
      */
-    protected fun getOrCreateHarvestSource(
-        uri: String,
-        checksum: String,
-        issued: Instant,
-    ): HarvestSourceEntity {
+    protected fun getOrCreateHarvestSource(uri: String, checksum: String, issued: Instant): HarvestSourceEntity {
         val existing = harvestSourceRepository.findByUri(uri)
         return existing
             ?: harvestSourceRepository.save(HarvestSourceEntity(uri = uri, checksum = checksum, issued = issued, initialized = false))
@@ -261,11 +257,7 @@ abstract class BaseHarvester(
      * @param dbResource The existing resource from the database (if any)
      * @throws HarvestSourceConflictException if the resource belongs to another harvest source
      */
-    protected fun validateSourceUrl(
-        resourceUri: String,
-        harvestSource: HarvestSourceEntity,
-        dbResource: ResourceEntity?,
-    ) {
+    protected fun validateSourceUrl(resourceUri: String, harvestSource: HarvestSourceEntity, dbResource: ResourceEntity?) {
         if (dbResource != null && !dbResource.removed && dbResource.harvestSource.id != harvestSource.id) {
             throw HarvestSourceConflictException(
                 "Resource $resourceUri already exists and was harvested from ${dbResource.harvestSource.uri}. " +
@@ -317,10 +309,9 @@ abstract class BaseHarvester(
         type: ResourceType,
         currentUris: Set<String>,
         harvestSource: HarvestSourceEntity,
-    ): List<ResourceEntity> =
-        resourceRepository
-            .findAllByType(type)
-            .filter { it.harvestSource.id == harvestSource.id && !it.removed && !currentUris.contains(it.uri) }
+    ): List<ResourceEntity> = resourceRepository
+        .findAllByType(type)
+        .filter { it.harvestSource.id == harvestSource.id && !it.removed && !currentUris.contains(it.uri) }
 
     /**
      * Type-specific harvest logic: parse RDF into resources, update the database, and build the report.

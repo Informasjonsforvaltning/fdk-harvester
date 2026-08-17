@@ -19,9 +19,7 @@ import java.time.Duration
  * when the breaker opens (e.g. after repeated harvest failures) or closes again.
  */
 @Configuration
-open class CircuitBreakerConsumerConfiguration(
-    private val kafkaManager: KafkaManager,
-) {
+open class CircuitBreakerConsumerConfiguration(private val kafkaManager: KafkaManager) {
     @Bean
     open fun circuitBreakerRegistry(): CircuitBreakerRegistry {
         val defaultConfig =

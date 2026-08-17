@@ -177,12 +177,12 @@ class ResourceHarvesterTest {
         orgAdapter: DefaultOrganizationsAdapter,
         resourceEventProducer: ResourceEventProducer,
     ) : ResourceHarvester(
-            harvestSourceRepository,
-            resourceRepository,
-            applicationProperties,
-            orgAdapter,
-            resourceEventProducer,
-        ) {
+        harvestSourceRepository,
+        resourceRepository,
+        applicationProperties,
+        orgAdapter,
+        resourceEventProducer,
+    ) {
         override val harvestConfig =
             ResourceHarvestConfig(
                 harvestDataType = HarvestDataType.dataservice,
@@ -200,10 +200,7 @@ class ResourceHarvesterTest {
 
         override fun memberLinkProperty(): Property = DCAT.service
 
-        override fun listMembers(
-            harvested: Model,
-            sourceURL: String,
-        ): List<MemberRDFModel> = emptyList()
+        override fun listMembers(harvested: Model, sourceURL: String): List<MemberRDFModel> = emptyList()
 
         override fun extractContainers(
             harvested: Model,
@@ -214,9 +211,7 @@ class ResourceHarvesterTest {
 
         override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(DCAT.DataService)
 
-        fun testExtractContainerModel(
-            resource: Resource,
-            memberLinkProperty: Property,
-        ): Model = resource.extractContainerModel(memberLinkProperty)
+        fun testExtractContainerModel(resource: Resource, memberLinkProperty: Property): Model =
+            resource.extractContainerModel(memberLinkProperty)
     }
 }

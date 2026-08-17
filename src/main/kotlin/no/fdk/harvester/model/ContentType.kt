@@ -1,8 +1,6 @@
 package no.fdk.harvester.model
 
-enum class ContentType(
-    vararg val headers: String,
-) {
+enum class ContentType(vararg val headers: String) {
     TURTLE("text/turtle", "application/turtle"),
     N3("text/rdf+n3", "application/n3", "text/n3"),
     TRIG("application/trig", "text/trig"),

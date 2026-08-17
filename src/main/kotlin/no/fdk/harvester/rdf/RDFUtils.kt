@@ -42,34 +42,24 @@ fun jenaTypeFromAcceptHeader(accept: String?): Lang? {
     }
 }
 
-fun safeParseRDF(
-    rdf: String,
-    lang: Lang,
-): Model =
-    try {
-        parseRDF(rdf, lang)
-    } catch (ex: Exception) {
-        logger.warn("parse failure", ex)
-        ModelFactory.createDefaultModel()
-    }
+fun safeParseRDF(rdf: String, lang: Lang): Model = try {
+    parseRDF(rdf, lang)
+} catch (ex: Exception) {
+    logger.warn("parse failure", ex)
+    ModelFactory.createDefaultModel()
+}
 
-fun Model.createRDFResponse(responseType: Lang): String =
-    ByteArrayOutputStream().use { out ->
-        write(out, responseType.name)
-        out.flush()
-        out.toString("UTF-8")
-    }
+fun Model.createRDFResponse(responseType: Lang): String = ByteArrayOutputStream().use { out ->
+    write(out, responseType.name)
+    out.flush()
+    out.toString("UTF-8")
+}
 
-fun createIdFromString(idBase: String): String =
-    UUID
-        .nameUUIDFromBytes(idBase.toByteArray())
-        .toString()
+fun createIdFromString(idBase: String): String = UUID
+    .nameUUIDFromBytes(idBase.toByteArray())
+    .toString()
 
-fun Model.containsTriple(
-    subj: String,
-    pred: String,
-    obj: String,
-): Boolean {
+fun Model.containsTriple(subj: String, pred: String, obj: String): Boolean {
     val askQuery = "ASK { $subj $pred $obj }"
 
     return try {
@@ -80,20 +70,13 @@ fun Model.containsTriple(
     }
 }
 
-fun Resource.safeAddProperty(
-    property: Property,
-    value: String?,
-): Resource =
-    if (value.isNullOrEmpty()) {
-        this
-    } else {
-        addProperty(property, model.createResource(value))
-    }
+fun Resource.safeAddProperty(property: Property, value: String?): Resource = if (value.isNullOrEmpty()) {
+    this
+} else {
+    addProperty(property, model.createResource(value))
+}
 
-fun parseRDF(
-    responseBody: String,
-    rdfLanguage: Lang,
-): Model {
+fun parseRDF(responseBody: String, rdfLanguage: Lang): Model {
     val responseModel = ModelFactory.createDefaultModel()
     responseModel.read(StringReader(responseBody), BACKUP_BASE_URI, rdfLanguage.name)
 

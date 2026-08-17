@@ -28,18 +28,14 @@ class ConceptHarvester(
     harvestSourceRepository: HarvestSourceRepository,
     resourceEventProducer: ResourceEventProducer,
 ) : ResourceHarvester(
-        harvestSourceRepository,
-        resourceRepository,
-        applicationProperties,
-        orgAdapter,
-        resourceEventProducer,
-    ) {
-    fun harvestConceptCollection(
-        source: HarvestDataSource,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        runId: String,
-    ): HarvestReport? = validateAndHarvest(source, harvestDate, forceUpdate, runId, "concept", requiresAcceptHeader = true)
+    harvestSourceRepository,
+    resourceRepository,
+    applicationProperties,
+    orgAdapter,
+    resourceEventProducer,
+) {
+    fun harvestConceptCollection(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+        validateAndHarvest(source, harvestDate, forceUpdate, runId, "concept", requiresAcceptHeader = true)
 
     override val harvestConfig =
         ResourceHarvestConfig(
@@ -59,28 +55,23 @@ class ConceptHarvester(
 
     override fun memberLinkProperty(): Property = SKOS.member
 
-    override fun listMembers(
-        harvested: Model,
-        sourceURL: String,
-    ): List<MemberRDFModel> =
-        harvested
-            .listResourcesWithProperty(RDF.type, SKOS.Concept)
-            .toList()
-            .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(memberLinkProperty()) }
+    override fun listMembers(harvested: Model, sourceURL: String): List<MemberRDFModel> = harvested
+        .listResourcesWithProperty(RDF.type, SKOS.Concept)
+        .toList()
+        .excludeBlankNodes(sourceURL)
+        .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
         members: List<MemberRDFModel>,
         sourceURL: String,
         organization: Organization?,
-    ): List<ContainerRDFModel> =
-        extractContainersWithOrphans(
-            harvested = harvested,
-            members = members,
-            sourceURL = sourceURL,
-            organization = organization,
-        )
+    ): List<ContainerRDFModel> = extractContainersWithOrphans(
+        harvested = harvested,
+        members = members,
+        sourceURL = sourceURL,
+        organization = organization,
+    )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(SKOS.Concept)
 }

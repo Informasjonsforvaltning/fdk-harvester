@@ -61,11 +61,11 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestDatasetCatalog(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -141,11 +141,11 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestDatasetCatalog(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -186,11 +186,11 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestDataServiceCatalog(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -230,11 +230,11 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestInformationModelCatalog(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -280,11 +280,11 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestInformationModelCatalog(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -342,12 +342,12 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestConceptCollection(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                            publisherId = null,
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                        publisherId = null,
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -393,12 +393,12 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestConceptCollection(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                            publisherId = null,
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                        publisherId = null,
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -440,12 +440,12 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestServices(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                            publisherId = null,
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                        publisherId = null,
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -524,12 +524,12 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestServices(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                            publisherId = null,
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                        publisherId = null,
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -620,12 +620,12 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestServices(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                            publisherId = "123",
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                        publisherId = "123",
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -666,12 +666,12 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestEvents(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                            publisherId = null,
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                        publisherId = null,
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -737,11 +737,11 @@ class HarvesterHappyPathTest {
             val report =
                 harvester.harvestDatasetCatalog(
                     source =
-                        HarvestDataSource(
-                            id = "source-1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "source-1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                     forceUpdate = false,
                     runId = "run-1",
@@ -815,12 +815,12 @@ class HarvesterHappyPathTest {
                         modified = Instant.now(),
                         checksum = "existing-checksum",
                         harvestSource =
-                            HarvestSourceEntity(
-                                id = 2L,
-                                uri = "http://example.org/other-source",
-                                checksum = "other-source-checksum",
-                                issued = Instant.now(),
-                            ),
+                        HarvestSourceEntity(
+                            id = 2L,
+                            uri = "http://example.org/other-source",
+                            checksum = "other-source-checksum",
+                            issued = Instant.now(),
+                        ),
                     ),
                 )
             }

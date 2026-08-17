@@ -31,18 +31,14 @@ class EventHarvester(
     harvestSourceRepository: HarvestSourceRepository,
     resourceEventProducer: ResourceEventProducer,
 ) : ResourceHarvester(
-        harvestSourceRepository,
-        resourceRepository,
-        applicationProperties,
-        orgAdapter,
-        resourceEventProducer,
-    ) {
-    fun harvestEvents(
-        source: HarvestDataSource,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        runId: String,
-    ): HarvestReport? = validateAndHarvest(source, harvestDate, forceUpdate, runId, "event", requiresAcceptHeader = true)
+    harvestSourceRepository,
+    resourceRepository,
+    applicationProperties,
+    orgAdapter,
+    resourceEventProducer,
+) {
+    fun harvestEvents(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+        validateAndHarvest(source, harvestDate, forceUpdate, runId, "event", requiresAcceptHeader = true)
 
     override val harvestConfig =
         ResourceHarvestConfig(
@@ -61,34 +57,28 @@ class EventHarvester(
 
     override fun memberLinkProperty(): Property = DCATNO.containsEvent
 
-    override fun listMembers(
-        harvested: Model,
-        sourceURL: String,
-    ): List<MemberRDFModel> =
-        harvested
-            .listResourcesWithEventType()
-            .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(memberLinkProperty()) }
+    override fun listMembers(harvested: Model, sourceURL: String): List<MemberRDFModel> = harvested
+        .listResourcesWithEventType()
+        .excludeBlankNodes(sourceURL)
+        .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
         members: List<MemberRDFModel>,
         sourceURL: String,
         organization: Organization?,
-    ): List<ContainerRDFModel> =
-        extractContainersWithOrphans(
-            harvested = harvested,
-            members = members,
-            sourceURL = sourceURL,
-            organization = organization,
-        )
+    ): List<ContainerRDFModel> = extractContainersWithOrphans(
+        harvested = harvested,
+        members = members,
+        sourceURL = sourceURL,
+        organization = organization,
+    )
 
-    override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean =
-        types.contains(CV.Event) ||
-            types.contains(CV.BusinessEvent) ||
-            types.contains(CV.LifeEvent) ||
-            types.contains(CPSV.PublicService) ||
-            types.contains(CPSVNO.Service)
+    override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(CV.Event) ||
+        types.contains(CV.BusinessEvent) ||
+        types.contains(CV.LifeEvent) ||
+        types.contains(CPSV.PublicService) ||
+        types.contains(CPSVNO.Service)
 
     private fun Model.listResourcesWithEventType(): List<Resource> {
         val events = listResourcesWithProperty(RDF.type, CV.Event).toList()

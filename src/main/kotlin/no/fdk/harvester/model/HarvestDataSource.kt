@@ -18,8 +18,4 @@ data class HarvestDataSource(
 
 /** Optional HTTP auth header (type and value) for harvesting protected sources. */
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class AuthHeader(
-    val name: String? = null,
-    val type: String? = null,
-    val value: String? = null,
-)
+data class AuthHeader(val name: String? = null, val type: String? = null, val value: String? = null)

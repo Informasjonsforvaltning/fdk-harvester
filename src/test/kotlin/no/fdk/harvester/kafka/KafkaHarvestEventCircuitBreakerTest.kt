@@ -488,10 +488,10 @@ class KafkaHarvestEventCircuitBreakerTest {
                 startTime = "2024-01-01T00:00:00+01:00",
                 endTime = "2024-01-01T00:01:00+01:00",
                 removedResources =
-                    listOf(
-                        FdkIdAndUri("resource-1", "http://example.org/resource1"),
-                        FdkIdAndUri("resource-2", "http://example.org/resource2"),
-                    ),
+                listOf(
+                    FdkIdAndUri("resource-1", "http://example.org/resource1"),
+                    FdkIdAndUri("resource-2", "http://example.org/resource2"),
+                ),
             )
 
         every { harvestService.markResourcesAsDeleted(any(), any(), any(), any()) } returns report
@@ -542,18 +542,17 @@ class KafkaHarvestEventCircuitBreakerTest {
         runId: String = "run-123",
         forced: Boolean = false,
         removeAll: Boolean = false,
-    ): HarvestEvent =
-        HarvestEvent
-            .newBuilder()
-            .setPhase(HarvestPhase.INITIATING)
-            .setRunId(runId)
-            .setDataType(dataType)
-            .setDataSourceId(dataSourceId)
-            .setDataSourceUrl(dataSourceUrl)
-            .setAcceptHeader("text/turtle")
-            .setForced(forced)
-            .setRemoveAll(removeAll)
-            .build()
+    ): HarvestEvent = HarvestEvent
+        .newBuilder()
+        .setPhase(HarvestPhase.INITIATING)
+        .setRunId(runId)
+        .setDataType(dataType)
+        .setDataSourceId(dataSourceId)
+        .setDataSourceUrl(dataSourceUrl)
+        .setAcceptHeader("text/turtle")
+        .setForced(forced)
+        .setRemoveAll(removeAll)
+        .build()
 
     private fun createRemovingEvent(
         dataType: DataType,
@@ -561,29 +560,23 @@ class KafkaHarvestEventCircuitBreakerTest {
         dataSourceUrl: String,
         fdkId: String,
         runId: String = "run-123",
-    ): HarvestEvent =
-        HarvestEvent
-            .newBuilder()
-            .setPhase(HarvestPhase.REMOVING)
-            .setRunId(runId)
-            .setDataType(dataType)
-            .setDataSourceId(dataSourceId)
-            .setDataSourceUrl(dataSourceUrl)
-            .setFdkId(fdkId)
-            .build()
+    ): HarvestEvent = HarvestEvent
+        .newBuilder()
+        .setPhase(HarvestPhase.REMOVING)
+        .setRunId(runId)
+        .setDataType(dataType)
+        .setDataSourceId(dataSourceId)
+        .setDataSourceUrl(dataSourceUrl)
+        .setFdkId(fdkId)
+        .build()
 
-    private fun createSuccessReport(
-        dataType: String,
-        sourceId: String,
-        sourceUrl: String,
-    ): HarvestReport =
-        HarvestReport(
-            runId = "run-123",
-            dataSourceId = sourceId,
-            dataSourceUrl = sourceUrl,
-            dataType = dataType,
-            harvestError = false,
-            startTime = "2024-01-01T00:00:00+01:00",
-            endTime = "2024-01-01T00:01:00+01:00",
-        )
+    private fun createSuccessReport(dataType: String, sourceId: String, sourceUrl: String): HarvestReport = HarvestReport(
+        runId = "run-123",
+        dataSourceId = sourceId,
+        dataSourceUrl = sourceUrl,
+        dataType = dataType,
+        harvestError = false,
+        startTime = "2024-01-01T00:00:00+01:00",
+        endTime = "2024-01-01T00:01:00+01:00",
+    )
 }

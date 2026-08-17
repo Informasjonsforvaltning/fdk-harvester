@@ -29,18 +29,14 @@ class DatasetHarvester(
     harvestSourceRepository: HarvestSourceRepository,
     resourceEventProducer: ResourceEventProducer,
 ) : ResourceHarvester(
-        harvestSourceRepository,
-        resourceRepository,
-        applicationProperties,
-        orgAdapter,
-        resourceEventProducer,
-    ) {
-    fun harvestDatasetCatalog(
-        source: HarvestDataSource,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        runId: String,
-    ): HarvestReport? = validateAndHarvest(source, harvestDate, forceUpdate, runId, "dataset", requiresAcceptHeader = true)
+    harvestSourceRepository,
+    resourceRepository,
+    applicationProperties,
+    orgAdapter,
+    resourceEventProducer,
+) {
+    fun harvestDatasetCatalog(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+        validateAndHarvest(source, harvestDate, forceUpdate, runId, "dataset", requiresAcceptHeader = true)
 
     override val harvestConfig =
         ResourceHarvestConfig(
@@ -59,10 +55,7 @@ class DatasetHarvester(
 
     override fun memberLinkProperty(): Property = DCAT.dataset
 
-    override fun listMembers(
-        harvested: Model,
-        sourceURL: String,
-    ): List<MemberRDFModel> {
+    override fun listMembers(harvested: Model, sourceURL: String): List<MemberRDFModel> {
         val datasets = harvested.listResourcesWithProperty(RDF.type, DCAT.Dataset).toList()
         val series = harvested.listResourcesWithProperty(RDF.type, DCAT3.DatasetSeries).toList()
         return (datasets + series)
@@ -76,25 +69,24 @@ class DatasetHarvester(
         members: List<MemberRDFModel>,
         sourceURL: String,
         organization: Organization?,
-    ): List<ContainerRDFModel> =
-        extractContainersWithOrphans(
-            harvested = harvested,
-            members = members,
-            sourceURL = sourceURL,
-            organization = organization,
-            resolveContainerMemberUris = { containerResource ->
-                containerResource
-                    .listProperties(memberLinkProperty())
-                    .toList()
-                    .filter { it.isResourceProperty() }
-                    .map { it.resource }
-                    .flatMap { it.expandDatasetSeriesMembers() }
-                    .filter { it.isHarvestableDataset() }
-                    .excludeBlankNodes(sourceURL)
-                    .map { it.uri }
-                    .toSet()
-            },
-        )
+    ): List<ContainerRDFModel> = extractContainersWithOrphans(
+        harvested = harvested,
+        members = members,
+        sourceURL = sourceURL,
+        organization = organization,
+        resolveContainerMemberUris = { containerResource ->
+            containerResource
+                .listProperties(memberLinkProperty())
+                .toList()
+                .filter { it.isResourceProperty() }
+                .map { it.resource }
+                .flatMap { it.expandDatasetSeriesMembers() }
+                .filter { it.isHarvestableDataset() }
+                .excludeBlankNodes(sourceURL)
+                .map { it.uri }
+                .toSet()
+        },
+    )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean =
         types.contains(DCAT.Dataset) || types.contains(DCAT3.DatasetSeries)

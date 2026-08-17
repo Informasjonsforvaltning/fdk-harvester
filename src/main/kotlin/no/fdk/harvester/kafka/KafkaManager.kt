@@ -9,9 +9,7 @@ import org.springframework.stereotype.Component
  * Pauses and resumes Kafka listener containers by listener id (used when circuit breaker opens/closes).
  */
 @Component
-class KafkaManager(
-    private val registry: KafkaListenerEndpointRegistry,
-) {
+class KafkaManager(private val registry: KafkaListenerEndpointRegistry) {
     fun pause(id: String) {
         LOGGER.debug("Pausing kafka listener containers with id: $id")
         registry.listenerContainers

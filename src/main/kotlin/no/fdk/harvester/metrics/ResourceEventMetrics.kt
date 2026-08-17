@@ -11,11 +11,7 @@ object ResourceEventMetrics {
         this.registry = registry
     }
 
-    fun recordPublish(
-        dataType: DataType,
-        kind: ResourceEventKind,
-        outcome: PublishOutcome,
-    ) {
+    fun recordPublish(dataType: DataType, kind: ResourceEventKind, outcome: PublishOutcome) {
         registry
             .counter(
                 "resource_event_publish_total",
@@ -30,17 +26,12 @@ object ResourceEventMetrics {
             ).increment()
     }
 
-    enum class ResourceEventKind(
-        val label: String,
-    ) {
+    enum class ResourceEventKind(val label: String) {
         HARVESTED("harvested"),
         REMOVED("removed"),
     }
 
-    enum class PublishOutcome(
-        val status: String,
-        val reason: String,
-    ) {
+    enum class PublishOutcome(val status: String, val reason: String) {
         SUCCESS("success", "published"),
         PUBLISH_FAILED("error", "publish_failed"),
         TOPIC_NOT_CONFIGURED("error", "topic_not_configured"),

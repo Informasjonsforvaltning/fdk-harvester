@@ -60,11 +60,7 @@ class ResourceEventProducer(
         publishEvents(dataType, resources, runId, ResourceEventKind.HARVESTED, resourceGraphs, catalogGraphs)
     }
 
-    fun publishRemovedEvents(
-        dataType: DataType,
-        resources: List<FdkIdAndUri>,
-        runId: String,
-    ) {
+    fun publishRemovedEvents(dataType: DataType, resources: List<FdkIdAndUri>, runId: String) {
         publishEvents(dataType, resources, runId, ResourceEventKind.REMOVED)
     }
 
@@ -107,11 +103,11 @@ class ResourceEventProducer(
                             dataType = dataType,
                             kind = kind.toMetricsKind(),
                             outcome =
-                                if (ex == null) {
-                                    PublishOutcome.SUCCESS
-                                } else {
-                                    PublishOutcome.PUBLISH_FAILED
-                                },
+                            if (ex == null) {
+                                PublishOutcome.SUCCESS
+                            } else {
+                                PublishOutcome.PUBLISH_FAILED
+                            },
                         )
                         if (ex == null) {
                             logProducedResourceEvent(
@@ -144,11 +140,10 @@ class ResourceEventProducer(
         }
     }
 
-    private fun ResourceEventKind.toMetricsKind(): ResourceEventMetrics.ResourceEventKind =
-        when (this) {
-            ResourceEventKind.HARVESTED -> ResourceEventMetrics.ResourceEventKind.HARVESTED
-            ResourceEventKind.REMOVED -> ResourceEventMetrics.ResourceEventKind.REMOVED
-        }
+    private fun ResourceEventKind.toMetricsKind(): ResourceEventMetrics.ResourceEventKind = when (this) {
+        ResourceEventKind.HARVESTED -> ResourceEventMetrics.ResourceEventKind.HARVESTED
+        ResourceEventKind.REMOVED -> ResourceEventMetrics.ResourceEventKind.REMOVED
+    }
 
     private fun buildEvent(
         dataType: DataType,

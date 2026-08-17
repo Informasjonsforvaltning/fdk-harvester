@@ -73,11 +73,11 @@ class BaseHarvesterValidationTest {
             val report =
                 harvester.harvest(
                     source =
-                        HarvestDataSource(
-                            id = "s1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "*/*",
-                        ),
+                    HarvestDataSource(
+                        id = "s1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "*/*",
+                    ),
                     harvestDate = Calendar.getInstance(),
                 )
 
@@ -101,11 +101,11 @@ class BaseHarvesterValidationTest {
             val report =
                 harvester.harvest(
                     source =
-                        HarvestDataSource(
-                            id = "s1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "application/unknown",
-                        ),
+                    HarvestDataSource(
+                        id = "s1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "application/unknown",
+                    ),
                     harvestDate = Calendar.getInstance(),
                 )
 
@@ -129,11 +129,11 @@ class BaseHarvesterValidationTest {
             val report =
                 harvester.harvest(
                     source =
-                        HarvestDataSource(
-                            id = "s1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "s1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                 )
 
@@ -173,11 +173,11 @@ class BaseHarvesterValidationTest {
             val report =
                 harvester.harvest(
                     source =
-                        HarvestDataSource(
-                            id = "s1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "s1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                 )
 
@@ -217,12 +217,12 @@ class BaseHarvesterValidationTest {
             val report =
                 harvester.harvest(
                     source =
-                        HarvestDataSource(
-                            id = "s1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                            authHeader = AuthHeader(type = "X-Auth-Token", value = "secret"),
-                        ),
+                    HarvestDataSource(
+                        id = "s1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                        authHeader = AuthHeader(type = "X-Auth-Token", value = "secret"),
+                    ),
                     harvestDate = Calendar.getInstance(),
                 )
 
@@ -254,11 +254,11 @@ class BaseHarvesterValidationTest {
             val report =
                 harvester.harvest(
                     source =
-                        HarvestDataSource(
-                            id = "s1",
-                            url = "http://localhost:${server.port()}/rdf",
-                            acceptHeaderValue = "text/turtle",
-                        ),
+                    HarvestDataSource(
+                        id = "s1",
+                        url = "http://localhost:${server.port()}/rdf",
+                        acceptHeaderValue = "text/turtle",
+                    ),
                     harvestDate = Calendar.getInstance(),
                 )
 
@@ -269,14 +269,9 @@ class BaseHarvesterValidationTest {
         }
     }
 
-    private class TestHarvester(
-        harvestSourceRepository: HarvestSourceRepository,
-        resourceRepository: ResourceRepository,
-    ) : BaseHarvester(harvestSourceRepository, resourceRepository) {
-        fun harvest(
-            source: HarvestDataSource,
-            harvestDate: Calendar,
-        ): HarvestReport? =
+    private class TestHarvester(harvestSourceRepository: HarvestSourceRepository, resourceRepository: ResourceRepository) :
+        BaseHarvester(harvestSourceRepository, resourceRepository) {
+        fun harvest(source: HarvestDataSource, harvestDate: Calendar): HarvestReport? =
             validateAndHarvest(source, harvestDate, forceUpdate = false, runId = "run-1", dataType = "test", requiresAcceptHeader = true)
 
         override fun updateDB(
@@ -287,16 +282,15 @@ class BaseHarvesterValidationTest {
             runId: String,
             dataType: String,
             harvestSource: HarvestSourceEntity,
-        ): HarvestReport =
-            HarvestReportBuilder.createSuccessReport(
-                dataType = dataType,
-                sourceId = source.id!!,
-                sourceUrl = source.url!!,
-                harvestDate = harvestDate,
-                changedCatalogs = emptyList(),
-                changedResources = emptyList(),
-                removedResources = emptyList(),
-                runId = runId,
-            )
+        ): HarvestReport = HarvestReportBuilder.createSuccessReport(
+            dataType = dataType,
+            sourceId = source.id!!,
+            sourceUrl = source.url!!,
+            harvestDate = harvestDate,
+            changedCatalogs = emptyList(),
+            changedResources = emptyList(),
+            removedResources = emptyList(),
+            runId = runId,
+        )
     }
 }

@@ -15,10 +15,7 @@ object KafkaHarvestMetrics {
         registerListenerPausedGauge()
     }
 
-    fun recordEventProcessed(
-        phase: HarvestPhase,
-        result: EventProcessingResult,
-    ) {
+    fun recordEventProcessed(phase: HarvestPhase, result: EventProcessingResult) {
         registry
             .counter(
                 "harvest_event_processing_total",
@@ -41,9 +38,7 @@ object KafkaHarvestMetrics {
             .register(registry)
     }
 
-    enum class EventProcessingResult(
-        val label: String,
-    ) {
+    enum class EventProcessingResult(val label: String) {
         ACKED("acked"),
         NACKED("nacked"),
         SKIPPED("skipped"),

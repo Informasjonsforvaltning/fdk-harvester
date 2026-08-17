@@ -29,18 +29,14 @@ class DataServiceHarvester(
     harvestSourceRepository: HarvestSourceRepository,
     resourceEventProducer: ResourceEventProducer,
 ) : ResourceHarvester(
-        harvestSourceRepository,
-        resourceRepository,
-        applicationProperties,
-        orgAdapter,
-        resourceEventProducer,
-    ) {
-    fun harvestDataServiceCatalog(
-        source: HarvestDataSource,
-        harvestDate: Calendar,
-        forceUpdate: Boolean,
-        runId: String,
-    ): HarvestReport? = validateAndHarvest(source, harvestDate, forceUpdate, runId, "dataservice", requiresAcceptHeader = true)
+    harvestSourceRepository,
+    resourceRepository,
+    applicationProperties,
+    orgAdapter,
+    resourceEventProducer,
+) {
+    fun harvestDataServiceCatalog(source: HarvestDataSource, harvestDate: Calendar, forceUpdate: Boolean, runId: String): HarvestReport? =
+        validateAndHarvest(source, harvestDate, forceUpdate, runId, "dataservice", requiresAcceptHeader = true)
 
     override val harvestConfig =
         ResourceHarvestConfig(
@@ -59,28 +55,23 @@ class DataServiceHarvester(
 
     override fun memberLinkProperty(): Property = DCAT.service
 
-    override fun listMembers(
-        harvested: Model,
-        sourceURL: String,
-    ): List<MemberRDFModel> =
-        harvested
-            .listResourcesWithProperty(RDF.type, DCAT.DataService)
-            .toList()
-            .excludeBlankNodes(sourceURL)
-            .map { it.extractMember(memberLinkProperty()) }
+    override fun listMembers(harvested: Model, sourceURL: String): List<MemberRDFModel> = harvested
+        .listResourcesWithProperty(RDF.type, DCAT.DataService)
+        .toList()
+        .excludeBlankNodes(sourceURL)
+        .map { it.extractMember(memberLinkProperty()) }
 
     override fun extractContainers(
         harvested: Model,
         members: List<MemberRDFModel>,
         sourceURL: String,
         organization: Organization?,
-    ): List<ContainerRDFModel> =
-        extractContainersWithOrphans(
-            harvested = harvested,
-            members = members,
-            sourceURL = sourceURL,
-            organization = organization,
-        )
+    ): List<ContainerRDFModel> = extractContainersWithOrphans(
+        harvested = harvested,
+        members = members,
+        sourceURL = sourceURL,
+        organization = organization,
+    )
 
     override fun isSeparatelyHarvestedMemberType(types: List<RDFNode>): Boolean = types.contains(DCAT.DataService)
 }

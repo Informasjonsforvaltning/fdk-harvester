@@ -24,10 +24,7 @@ class HarvestEventProducer(
      * Builds a HARVESTING phase event from an initiating event and optional report, and sends it to the topic.
      * @return the send future, or null if runId is missing or send fails
      */
-    fun produceHarvestingEvent(
-        initiatingEvent: HarvestEvent,
-        report: HarvestReport?,
-    ): CompletableFuture<*>? {
+    fun produceHarvestingEvent(initiatingEvent: HarvestEvent, report: HarvestReport?): CompletableFuture<*>? {
         return try {
             if (initiatingEvent.runId == null) {
                 logger.error("Initiating event is missing runId, cannot produce harvesting event")

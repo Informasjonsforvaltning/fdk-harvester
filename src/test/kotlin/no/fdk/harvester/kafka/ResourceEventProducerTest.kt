@@ -159,10 +159,7 @@ class ResourceEventProducerTest {
         every { kafkaTemplate.send(capture(topics), capture(keys), capture(records)) } returns
             CompletableFuture.completedFuture(mockk<SendResult<String, SpecificRecord>>())
 
-        fun run(
-            dataType: DataType,
-            expectedTopic: String,
-        ) {
+        fun run(dataType: DataType, expectedTopic: String) {
             topics.clear()
             keys.clear()
             records.clear()
@@ -219,10 +216,7 @@ class ResourceEventProducerTest {
         every { kafkaTemplate.send(capture(topics), capture(keys), capture(records)) } returns
             CompletableFuture.completedFuture(mockk<SendResult<String, SpecificRecord>>())
 
-        fun run(
-            dataType: DataType,
-            expectedTopic: String,
-        ) {
+        fun run(dataType: DataType, expectedTopic: String) {
             topics.clear()
             keys.clear()
             records.clear()

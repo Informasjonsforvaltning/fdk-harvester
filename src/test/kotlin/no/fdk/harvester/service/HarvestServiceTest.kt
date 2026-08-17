@@ -769,17 +769,16 @@ class HarvestServiceTest {
         assertEquals("fdk-ev", result.removedResources[0].fdkId)
     }
 
-    private fun createReport(dataType: String): HarvestReport =
-        HarvestReport(
-            runId = "run-1",
-            dataSourceId = "ds-1",
-            dataSourceUrl = "http://example.org/source",
-            dataType = dataType,
-            harvestError = false,
-            startTime = "2024-01-01T00:00:00",
-            endTime = "2024-01-01T00:00:01",
-            changedCatalogs = emptyList(),
-            changedResources = emptyList(),
-            removedResources = emptyList(),
-        )
+    private fun createReport(dataType: String): HarvestReport = HarvestReport(
+        runId = "run-1",
+        dataSourceId = "ds-1",
+        dataSourceUrl = "http://example.org/source",
+        dataType = dataType,
+        harvestError = false,
+        startTime = "2024-01-01T00:00:00",
+        endTime = "2024-01-01T00:00:01",
+        changedCatalogs = emptyList(),
+        changedResources = emptyList(),
+        removedResources = emptyList(),
+    )
 }

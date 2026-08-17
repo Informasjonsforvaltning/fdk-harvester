@@ -10,10 +10,7 @@ import org.springframework.stereotype.Repository
 interface ResourceRepository : JpaRepository<ResourceEntity, String> {
     fun findAllByType(type: ResourceType): List<ResourceEntity>
 
-    fun findAllByTypeAndRemoved(
-        type: ResourceType,
-        removed: Boolean,
-    ): List<ResourceEntity>
+    fun findAllByTypeAndRemoved(type: ResourceType, removed: Boolean): List<ResourceEntity>
 
     fun findByFdkId(fdkId: String): ResourceEntity?
 

@@ -53,10 +53,10 @@ class HarvestMetricsTest {
                 startTime = "2024-01-01T00:00:00+01:00",
                 endTime = "2024-01-01T00:01:00+01:00",
                 changedResources =
-                    listOf(
-                        FdkIdAndUri("a", "http://example.org/a"),
-                        FdkIdAndUri("b", "http://example.org/b"),
-                    ),
+                listOf(
+                    FdkIdAndUri("a", "http://example.org/a"),
+                    FdkIdAndUri("b", "http://example.org/b"),
+                ),
                 removedResources = listOf(FdkIdAndUri("c", "http://example.org/c")),
             )
 

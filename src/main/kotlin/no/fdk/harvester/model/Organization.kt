@@ -11,8 +11,4 @@ data class Organization(
 )
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-data class PrefLabel(
-    val nb: String? = null,
-    val nn: String? = null,
-    val en: String? = null,
-)
+data class PrefLabel(val nb: String? = null, val nn: String? = null, val en: String? = null)

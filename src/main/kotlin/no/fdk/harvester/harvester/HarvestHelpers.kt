@@ -39,35 +39,32 @@ internal fun Model.recursiveBlankNodeSkolem(baseURI: String): Model {
     }
 }
 
-private fun Resource.doesNotContainAnon(): Boolean =
-    listProperties()
-        .toList()
-        .filter { it.isResourceProperty() }
-        .map { it.resource }
-        .filter { it.listProperties().toList().size > 0 }
-        .none { it.isAnon }
+private fun Resource.doesNotContainAnon(): Boolean = listProperties()
+    .toList()
+    .filter { it.isResourceProperty() }
+    .map { it.resource }
+    .filter { it.listProperties().toList().size > 0 }
+    .none { it.isAnon }
 
-private fun Resource.createSkolemID(): String =
-    createIdFromString(
-        listProperties()
-            .toModel()
-            .createRDFResponse(Lang.N3)
-            .replace("\\s".toRegex(), "")
-            .toCharArray()
-            .sorted()
-            .toString(),
-    )
+private fun Resource.createSkolemID(): String = createIdFromString(
+    listProperties()
+        .toModel()
+        .createRDFResponse(Lang.N3)
+        .replace("\\s".toRegex(), "")
+        .toCharArray()
+        .sorted()
+        .toString(),
+)
 
 /** Drops blank-node resources (only URI resources can be harvested), logging a warning for each. */
-internal fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> =
-    filter {
-        if (it.isURIResource) {
-            true
-        } else {
-            LOGGER.warn("Blank node resource filtered when harvesting $sourceURL")
-            false
-        }
+internal fun List<Resource>.excludeBlankNodes(sourceURL: String): List<Resource> = filter {
+    if (it.isURIResource) {
+        true
+    } else {
+        LOGGER.warn("Blank node resource filtered when harvesting $sourceURL")
+        false
     }
+}
 
 internal fun Resource.addPublisherForGeneratedCatalog(publisherURI: String?): Resource {
     if (publisherURI != null) {
@@ -76,11 +73,7 @@ internal fun Resource.addPublisherForGeneratedCatalog(publisherURI: String?): Re
     return this
 }
 
-internal fun Resource.addLabelForGeneratedCatalog(
-    organization: Organization?,
-    nbnnSuffix: String,
-    enSuffix: String,
-): Resource {
+internal fun Resource.addLabelForGeneratedCatalog(organization: Organization?, nbnnSuffix: String, enSuffix: String): Resource {
     val nb: String? = organization?.prefLabel?.nb ?: organization?.name
     if (!nb.isNullOrBlank()) addProperty(RDFS.label, model.createLiteral("$nb - $nbnnSuffix", "nb"))
 
@@ -93,22 +86,19 @@ internal fun Resource.addLabelForGeneratedCatalog(
     return this
 }
 
-fun Statement.isResourceProperty(): Boolean =
-    try {
-        resource.isResource
-    } catch (ex: ResourceRequiredException) {
-        false
-    }
+fun Statement.isResourceProperty(): Boolean = try {
+    resource.isResource
+} catch (ex: ResourceRequiredException) {
+    false
+}
 
-fun formatNowWithOsloTimeZone(): String =
-    ZonedDateTime
-        .now(ZoneId.of("Europe/Oslo"))
-        .format(DateTimeFormatter.ofPattern(DATE_FORMAT))
+fun formatNowWithOsloTimeZone(): String = ZonedDateTime
+    .now(ZoneId.of("Europe/Oslo"))
+    .format(DateTimeFormatter.ofPattern(DATE_FORMAT))
 
-fun Calendar.formatWithOsloTimeZone(): String =
-    ZonedDateTime
-        .from(toInstant().atZone(ZoneId.of("Europe/Oslo")))
-        .format(DateTimeFormatter.ofPattern(DATE_FORMAT))
+fun Calendar.formatWithOsloTimeZone(): String = ZonedDateTime
+    .from(toInstant().atZone(ZoneId.of("Europe/Oslo")))
+    .format(DateTimeFormatter.ofPattern(DATE_FORMAT))
 
 fun createResourceEntity(
     uri: String,
@@ -117,27 +107,19 @@ fun createResourceEntity(
     harvestDate: Calendar,
     harvestSource: HarvestSourceEntity,
     dbMeta: ResourceEntity?,
-): ResourceEntity =
-    ResourceEntity(
-        uri = uri,
-        type = type,
-        fdkId = dbMeta?.fdkId ?: createIdFromString(uri),
-        removed = false,
-        issued = dbMeta?.issued ?: harvestDate.toInstant(),
-        modified = harvestDate.toInstant(),
-        checksum = checksum,
-        harvestSource = harvestSource,
-    )
+): ResourceEntity = ResourceEntity(
+    uri = uri,
+    type = type,
+    fdkId = dbMeta?.fdkId ?: createIdFromString(uri),
+    removed = false,
+    issued = dbMeta?.issued ?: harvestDate.toInstant(),
+    modified = harvestDate.toInstant(),
+    checksum = checksum,
+    harvestSource = harvestSource,
+)
 
-fun checksumHasChanged(
-    dbMeta: ResourceEntity?,
-    checksum: String,
-): Boolean = dbMeta == null || checksum != dbMeta.checksum
+fun checksumHasChanged(dbMeta: ResourceEntity?, checksum: String): Boolean = dbMeta == null || checksum != dbMeta.checksum
 
-class HarvestException(
-    url: String,
-) : Exception("Harvest failed for $url")
+class HarvestException(url: String) : Exception("Harvest failed for $url")
 
-class HarvestSourceConflictException(
-    message: String,
-) : Exception(message)
+class HarvestSourceConflictException(message: String) : Exception(message)
