@@ -29,7 +29,6 @@ class CircuitBreakerConsumerConfigurationTest {
         HarvestMetrics.bind(Metrics.globalRegistry)
         KafkaHarvestMetrics.bind(Metrics.globalRegistry)
         ResourceEventMetrics.bind(Metrics.globalRegistry)
-        KafkaHarvestMetrics.registerListenerPausedGauge()
     }
 
     @AfterEach

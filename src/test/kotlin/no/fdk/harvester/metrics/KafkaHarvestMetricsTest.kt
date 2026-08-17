@@ -79,19 +79,34 @@ class KafkaHarvestMetricsTest {
     }
 
     @Test
-    fun `registerListenerPausedGauge exposes gauge before first state change`() {
-        KafkaHarvestMetrics.registerListenerPausedGauge()
-
+    fun `bind exposes gauge before first state change`() {
         assertEquals(0.0, registry.find("kafka_listener_paused").gauge()?.value())
     }
 
     @Test
     fun `setListenerPaused updates kafka_listener_paused gauge`() {
-        KafkaHarvestMetrics.registerListenerPausedGauge()
         KafkaHarvestMetrics.setListenerPaused(true)
         assertEquals(1.0, registry.find("kafka_listener_paused").gauge()?.value())
 
         KafkaHarvestMetrics.setListenerPaused(false)
         assertEquals(0.0, registry.find("kafka_listener_paused").gauge()?.value())
+    }
+
+    @Test
+    fun `bind registers again on a freshly attached registry`() {
+        Metrics.removeRegistry(registry)
+        registry.clear()
+        val nextRegistry = SimpleMeterRegistry()
+        Metrics.addRegistry(nextRegistry)
+        try {
+            KafkaHarvestMetrics.bind(Metrics.globalRegistry)
+            KafkaHarvestMetrics.setListenerPaused(true)
+
+            assertEquals(1.0, nextRegistry.find("kafka_listener_paused").gauge()?.value())
+        } finally {
+            Metrics.removeRegistry(nextRegistry)
+            nextRegistry.clear()
+            Metrics.addRegistry(registry)
+        }
     }
 }

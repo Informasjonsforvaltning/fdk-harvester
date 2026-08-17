@@ -20,7 +20,6 @@ open class MetricsConfiguration(
         HarvestMetrics.bind(meterRegistry)
         KafkaHarvestMetrics.bind(meterRegistry)
         ResourceEventMetrics.bind(meterRegistry)
-        KafkaHarvestMetrics.registerListenerPausedGauge()
 
         TaggedCircuitBreakerMetrics
             .ofCircuitBreakerRegistry(circuitBreakerRegistry)
