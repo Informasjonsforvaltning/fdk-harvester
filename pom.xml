@@ -35,10 +35,11 @@
         <kotlin.version>2.3.21</kotlin.version>
         <ktlint.version>3.7.1</ktlint.version>
         <testcontainers.version>2.0.5</testcontainers.version>
-        <jena.version>6.0.0</jena.version>
+        <jena.version>6.2.0</jena.version>
         <avro.version>1.12.1</avro.version>
         <confluent.version>8.2.0</confluent.version>
         <resilience4j.version>2.4.0</resilience4j.version>
+        <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
     <repositories>
