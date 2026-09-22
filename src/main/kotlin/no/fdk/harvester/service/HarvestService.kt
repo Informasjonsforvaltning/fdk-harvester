@@ -131,7 +131,8 @@ open class HarvestService(
                         )
                     }
                 } ?: run {
-                    logger.warn("No harvester configured for dataType: $dataType")
+                    val detail = "No harvester configured for dataType: $dataType"
+                    logger.warn(detail)
                     HarvestReportBuilder.createErrorReport(
                         dataType = dataType.name.lowercase(),
                         source = dataSource,
@@ -140,6 +141,7 @@ open class HarvestService(
                             category = HarvestErrorCategory.INTERNAL_ERROR,
                             dataSourceUrl = dataSourceUrl,
                             dataType = dataType,
+                            originalError = detail,
                         ),
                         errorCategory = HarvestErrorCategory.INTERNAL_ERROR,
                         harvestDate = harvestDate,

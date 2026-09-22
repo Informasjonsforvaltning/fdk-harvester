@@ -21,6 +21,21 @@ class HarvestErrorMessageMapperTest {
     }
 
     @Test
+    fun `validation error message includes original error details`() {
+        val originalError = "Harvest source missing acceptHeaderValue"
+        val msg =
+            HarvestErrorMessageMapper.toUserMessage(
+                category = HarvestErrorCategory.VALIDATION_ERROR,
+                dataSourceUrl = "http://example.org/source",
+                dataType = DataType.dataset,
+                originalError = originalError,
+            )
+
+        assertTrue(msg.contains("could not start", ignoreCase = true))
+        assertTrue(msg.contains(originalError))
+    }
+
+    @Test
     fun `source unavailable message contains url`() {
         val url = "http://example.org/source"
         val msg =
@@ -47,6 +62,21 @@ class HarvestErrorMessageMapperTest {
     }
 
     @Test
+    fun `source not found message includes original error details`() {
+        val originalError = "Harvest source not found for sourceUrl: http://example.org/missing"
+        val msg =
+            HarvestErrorMessageMapper.toUserMessage(
+                category = HarvestErrorCategory.SOURCE_NOT_FOUND,
+                dataSourceUrl = "http://example.org/missing",
+                dataType = DataType.dataset,
+                originalError = originalError,
+            )
+
+        assertTrue(msg.contains("not found", ignoreCase = true))
+        assertTrue(msg.contains(originalError))
+    }
+
+    @Test
     fun `source data invalid message mentions format`() {
         val msg =
             HarvestErrorMessageMapper.toUserMessage(
@@ -56,6 +86,21 @@ class HarvestErrorMessageMapperTest {
             )
 
         assertTrue(msg.contains("valid format", ignoreCase = true))
+    }
+
+    @Test
+    fun `source data invalid message includes original error details`() {
+        val originalError = "Expected RDF/XML but got HTML"
+        val msg =
+            HarvestErrorMessageMapper.toUserMessage(
+                category = HarvestErrorCategory.SOURCE_DATA_INVALID,
+                dataSourceUrl = "http://example.org/source",
+                dataType = DataType.dataset,
+                originalError = originalError,
+            )
+
+        assertTrue(msg.contains("valid format", ignoreCase = true))
+        assertTrue(msg.contains(originalError))
     }
 
     @Test
@@ -98,5 +143,20 @@ class HarvestErrorMessageMapperTest {
             )
 
         assertTrue(msg.contains("unexpected error", ignoreCase = true))
+    }
+
+    @Test
+    fun `internal error message includes original error details`() {
+        val originalError = "Connection refused: localhost:27017"
+        val msg =
+            HarvestErrorMessageMapper.toUserMessage(
+                category = HarvestErrorCategory.INTERNAL_ERROR,
+                dataSourceUrl = "http://example.org/source",
+                dataType = DataType.dataset,
+                originalError = originalError,
+            )
+
+        assertTrue(msg.contains("unexpected error", ignoreCase = true))
+        assertTrue(msg.contains(originalError))
     }
 }

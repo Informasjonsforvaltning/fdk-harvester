@@ -86,6 +86,7 @@ object HarvestReportBuilder {
             category = HarvestErrorCategory.VALIDATION_ERROR,
             dataSourceUrl = sourceUrl,
             dataType = null,
+            originalError = "Harvest source is not valid",
         ),
         errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
         startTime = harvestDate.formatWithOsloTimeZone(),

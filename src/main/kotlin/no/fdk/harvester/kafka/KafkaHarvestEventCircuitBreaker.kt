@@ -70,6 +70,7 @@ open class KafkaHarvestEventCircuitBreaker(
                         category = HarvestErrorCategory.VALIDATION_ERROR,
                         dataSourceUrl = event.dataSourceUrl?.toString(),
                         dataType = event.dataType,
+                        originalError = e.message,
                     )
                 // We do not have a HarvestReport here, so emit an event directly with the mapped message.
                 event.runId?.toString()?.let { runId ->
@@ -109,6 +110,7 @@ open class KafkaHarvestEventCircuitBreaker(
                         category = category,
                         dataSourceUrl = event.dataSourceUrl?.toString(),
                         dataType = event.dataType,
+                        originalError = e.message,
                     )
 
                 event.runId?.toString()?.let { runId ->

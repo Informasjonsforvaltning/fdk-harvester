@@ -117,7 +117,8 @@ abstract class BaseHarvester(
         }
 
         if (requiresAcceptHeader && source.acceptHeaderValue == null) {
-            logger.error("Harvest source missing acceptHeaderValue")
+            val detail = "Harvest source missing acceptHeaderValue"
+            logger.error(detail)
             return HarvestReportBuilder.createErrorReport(
                 dataType = dataType,
                 source = source,
@@ -126,6 +127,7 @@ abstract class BaseHarvester(
                     category = HarvestErrorCategory.VALIDATION_ERROR,
                     dataSourceUrl = source.url,
                     dataType = null,
+                    originalError = detail,
                 ),
                 errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
                 harvestDate = harvestDate,
@@ -138,10 +140,8 @@ abstract class BaseHarvester(
 
             when (val jenaWriterType = jenaTypeFromAcceptHeader(source.acceptHeaderValue)) {
                 null -> {
-                    logger.error(
-                        "Not able to harvest from ${source.url}, no accept header supplied",
-                        HarvestException(source.url),
-                    )
+                    val detail = "Not able to harvest from ${source.url}, no accept header supplied"
+                    logger.error(detail, HarvestException(source.url))
                     HarvestReportBuilder.createErrorReport(
                         dataType = dataType,
                         source = source,
@@ -150,6 +150,7 @@ abstract class BaseHarvester(
                             category = HarvestErrorCategory.VALIDATION_ERROR,
                             dataSourceUrl = source.url,
                             dataType = null,
+                            originalError = detail,
                         ),
                         errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
                         harvestDate = harvestDate,
@@ -158,10 +159,9 @@ abstract class BaseHarvester(
                 }
 
                 Lang.RDFNULL -> {
-                    logger.error(
-                        "Not able to harvest from ${source.url}, header ${source.acceptHeaderValue} is not acceptable",
-                        HarvestException(source.url),
-                    )
+                    val detail =
+                        "Not able to harvest from ${source.url}, header ${source.acceptHeaderValue} is not acceptable"
+                    logger.error(detail, HarvestException(source.url))
                     HarvestReportBuilder.createErrorReport(
                         dataType = dataType,
                         source = source,
@@ -170,6 +170,7 @@ abstract class BaseHarvester(
                             category = HarvestErrorCategory.VALIDATION_ERROR,
                             dataSourceUrl = source.url,
                             dataType = null,
+                            originalError = detail,
                         ),
                         errorCategory = HarvestErrorCategory.VALIDATION_ERROR,
                         harvestDate = harvestDate,
