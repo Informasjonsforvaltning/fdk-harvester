@@ -32,7 +32,7 @@
         <!-- Overrides Spring Boot 4.1.0 (42.7.11), which is still affected by CVE-2026-54291 -->
         <postgresql.version>42.7.13</postgresql.version>
 
-        <kotlin.version>2.3.21</kotlin.version>
+        <kotlin.version>2.4.20</kotlin.version>
         <ktlint.version>3.7.1</ktlint.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <jena.version>6.2.0</jena.version>
