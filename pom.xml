@@ -14,7 +14,7 @@
     <parent>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-parent</artifactId>
-      <version>4.1.0</version>
+      <version>4.1.1</version>
       <relativePath/>
     </parent>
 
@@ -29,17 +29,19 @@
         <maven.exec.skip>false</maven.exec.skip>
         <!--end standard properties-->
 
-        <!-- Overrides Spring Boot 4.1.0 (42.7.11), which is still affected by CVE-2026-54291 -->
-        <postgresql.version>42.7.13</postgresql.version>
+        <!-- Overrides Spring Boot 4.1.1 (11.0.24): CVE-2026-65182, CVE-2026-65905, CVE-2026-68525 -->
+        <tomcat.version>11.0.25</tomcat.version>
+        <!-- Overrides Spring Boot 4.1.1 (2.21.5 / 3.1.5): CVE-2026-68497 -->
+        <jackson-2-bom.version>2.21.6</jackson-2-bom.version>
+        <jackson-bom.version>3.1.6</jackson-bom.version>
 
-        <kotlin.version>2.3.21</kotlin.version>
+        <kotlin.version>2.4.20</kotlin.version>
         <ktlint.version>3.7.1</ktlint.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <jena.version>6.2.0</jena.version>
         <avro.version>1.12.1</avro.version>
         <confluent.version>8.2.0</confluent.version>
         <resilience4j.version>2.4.0</resilience4j.version>
-        <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
     <repositories>
@@ -102,7 +104,7 @@
         <dependency>
             <groupId>org.apache.httpcomponents.client5</groupId>
             <artifactId>httpclient5</artifactId>
-            <version>5.6.3</version>
+            <version>5.6.4</version>
         </dependency>
         <dependency>
             <groupId>io.confluent</groupId>
@@ -385,7 +387,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.8.14</version>
+                <version>0.8.15</version>
                 <executions>
                     <execution>
                         <id>before-unit-test-execution</id>
@@ -466,7 +468,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.5</version>
+                <version>3.5.6</version>
                 <configuration>
                     <useSystemClassLoader>false</useSystemClassLoader>
                     <!--suppress UnresolvedMavenProperty -->
@@ -482,7 +484,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
-                <version>3.5.5</version>
+                <version>3.5.6</version>
                 <configuration>
                     <!--suppress UnresolvedMavenProperty -->
                     <argLine>${failsafe.jacoco.args}</argLine>
