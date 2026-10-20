@@ -56,8 +56,23 @@ spec:
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
               valueFrom:
                 secretKeyRef:
-                  name: kafka
+                  name: kafka-user-fdk-harvester
                   key: BROKERS
+            - name: KAFKA_SECURITY_PROTOCOL
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-user-fdk-harvester
+                  key: SECURITY_PROTOCOL
+            - name: KAFKA_SASL_MECHANISM
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-user-fdk-harvester
+                  key: SASL_MECHANISM
+            - name: KAFKA_SASL_JAAS_CONFIG
+              valueFrom:
+                secretKeyRef:
+                  name: kafka-user-fdk-harvester
+                  key: SASL_JAAS_CONFIG
             - name: SPRING_KAFKA_CONSUMER_PROPERTIES_SCHEMA_REGISTRY_URL
               valueFrom:
                 secretKeyRef:
