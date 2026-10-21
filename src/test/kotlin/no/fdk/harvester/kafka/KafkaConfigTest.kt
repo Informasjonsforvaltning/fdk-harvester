@@ -12,6 +12,9 @@ class KafkaConfigTest {
         val config =
             KafkaConfig(
                 bootstrapServers = "localhost:9092",
+                securityProtocol = "PLAINTEXT",
+                saslMechanism = "SCRAM-SHA-512",
+                saslJaasConfig = "",
                 schemaRegistryUrl = "http://localhost:8081",
             )
         val factory = config.kafkaListenerContainerFactory()
