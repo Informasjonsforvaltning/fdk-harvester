@@ -32,8 +32,8 @@ class ResourceEventProducer(
     private val kafkaTemplate: KafkaTemplate<String, SpecificRecord>,
     @Value("\${app.kafka.topic.dataset-events:dataset-events}") datasetEventsTopic: String,
     @Value("\${app.kafka.topic.concept-events:concept-events}") conceptEventsTopic: String,
-    @Value("\${app.kafka.topic.dataservice-events:dataservice-events}") dataServiceEventsTopic: String,
-    @Value("\${app.kafka.topic.informationmodel-events:informationmodel-events}") informationModelEventsTopic: String,
+    @Value("\${app.kafka.topic.dataservice-events:data-service-events}") dataServiceEventsTopic: String,
+    @Value("\${app.kafka.topic.informationmodel-events:information-model-events}") informationModelEventsTopic: String,
     @Value("\${app.kafka.topic.service-events:service-events}") serviceEventsTopic: String,
     @Value("\${app.kafka.topic.event-events:event-events}") eventEventsTopic: String,
 ) {

@@ -204,7 +204,7 @@ class ResourceEventProducerTest {
                 kafkaTemplate = kafkaTemplate,
                 datasetEventsTopic = "dataset-events",
                 conceptEventsTopic = "concept-events",
-                dataServiceEventsTopic = "dataservice-events",
+                dataServiceEventsTopic = "data-service-events",
                 informationModelEventsTopic = "information-model-events",
                 serviceEventsTopic = "service-events",
                 eventEventsTopic = "event-events",
@@ -236,7 +236,7 @@ class ResourceEventProducerTest {
         run(DataType.concept, "concept-events")
         assertEquals(ConceptEventType.CONCEPT_REMOVED, (records.single() as ConceptEvent).type)
 
-        run(DataType.dataservice, "dataservice-events")
+        run(DataType.dataservice, "data-service-events")
         assertEquals(DataServiceEventType.DATA_SERVICE_REMOVED, (records.single() as DataServiceEvent).type)
 
         run(DataType.informationmodel, "information-model-events")
