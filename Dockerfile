@@ -17,6 +17,8 @@ WORKDIR $HOME
 
 COPY --chown=$USER:$USER /target/fdk-harvester.jar app.jar
 CMD ["sh", "-c", "java -jar \
+         -XX:MaxRAMPercentage=75 \
+         -XX:+ExitOnOutOfMemoryError \
          -Dorg.xerial.snappy.use.systemlib=true \
          -Dorg.xerial.snappy.lib.path=/usr/lib/libsnappy.so.1 \
          $JAVA_OPTS app.jar"]

@@ -136,11 +136,10 @@ spec:
               value: "event-events"
           resources:
             requests:
-              memory: "2Gi"
+              memory: "4Gi"
               cpu: "500m"
             limits:
               memory: "4Gi"
-              cpu: "2"
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
