@@ -35,6 +35,10 @@ open class KafkaConfig(
     @param:Value("\${spring.kafka.properties.sasl.mechanism}") private val saslMechanism: String,
     @param:Value("\${spring.kafka.properties.sasl.jaas.config}") private val saslJaasConfig: String,
     @param:Value("\${spring.kafka.consumer.properties.schema.registry.url}") private val schemaRegistryUrl: String,
+    // Each record triggers a full harvest, so fetch one at a time and allow long processing
+    // before the broker evicts the consumer from the group.
+    @param:Value("\${app.kafka.consumer.max-poll-records:1}") private val maxPollRecords: Int,
+    @param:Value("\${app.kafka.consumer.max-poll-interval-ms:1800000}") private val maxPollIntervalMs: Int,
 ) {
     @Bean
     open fun consumerFactory(): ConsumerFactory<String, HarvestEvent> {
@@ -49,6 +53,8 @@ open class KafkaConfig(
         props["schema.registry.url"] = schemaRegistryUrl
         props["specific.avro.reader"] = true
         props[ConsumerConfig.AUTO_OFFSET_RESET_CONFIG] = "earliest"
+        props[ConsumerConfig.MAX_POLL_RECORDS_CONFIG] = maxPollRecords
+        props[ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG] = maxPollIntervalMs
         return DefaultKafkaConsumerFactory(props)
     }
 
@@ -56,7 +62,7 @@ open class KafkaConfig(
     open fun kafkaListenerContainerFactory(): ConcurrentKafkaListenerContainerFactory<String, HarvestEvent> {
         val factory = ConcurrentKafkaListenerContainerFactory<String, HarvestEvent>()
         factory.setConsumerFactory(consumerFactory())
-        factory.containerProperties.ackMode = ContainerProperties.AckMode.MANUAL
+        factory.containerProperties.ackMode = ContainerProperties.AckMode.MANUAL_IMMEDIATE
         // Keep retrying instead of stopping the listeners for good on an auth failure.
         factory.containerProperties.setAuthExceptionRetryInterval(Duration.ofSeconds(30))
         factory.setConcurrency(4)

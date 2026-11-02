@@ -48,6 +48,9 @@ application:
 
 app:
   kafka:
+    consumer:
+      max-poll-records: ${APP_KAFKA_CONSUMER_MAX_POLL_RECORDS:1}
+      max-poll-interval-ms: ${APP_KAFKA_CONSUMER_MAX_POLL_INTERVAL_MS:1800000}
     topic:
       harvest-events: ${APP_KAFKA_TOPIC_HARVEST_EVENTS:harvest-events}
       dataset-events: ${APP_KAFKA_TOPIC_DATASET_EVENTS:dataset-events}
