@@ -35,6 +35,7 @@ class HarvestEventProducer(
                 HarvestEvent
                     .newBuilder(initiatingEvent)
                     .setPhase(HarvestPhase.HARVESTING)
+                    .setForcedFdkIds(null)
                     .setChangedResourcesCount(report?.changedResources?.size)
                     .setRemovedResourcesCount(report?.removedResources?.size)
                     .setStartTime(report?.startTime)

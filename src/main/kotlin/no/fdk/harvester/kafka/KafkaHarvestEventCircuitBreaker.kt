@@ -149,6 +149,7 @@ open class KafkaHarvestEventCircuitBreaker(
             }
 
         val forced = event.forced ?: false
+        val forcedFdkIds = event.forcedFdkIds?.map { it.toString() }?.toSet() ?: emptySet()
         val (report, duration) =
             measureTimedValue {
                 harvestService.executeHarvest(
@@ -158,13 +159,14 @@ open class KafkaHarvestEventCircuitBreaker(
                     acceptHeader = acceptHeader,
                     runId = runId,
                     forced = forced,
+                    forcedFdkIds = forcedFdkIds,
                 )
             }
 
         HarvestMetrics.record(
             report = report,
             dataType = event.dataType,
-            forceUpdate = forced,
+            forceUpdate = forced || forcedFdkIds.isNotEmpty(),
             dataSourceId = dataSourceId,
             dataSourceUrl = dataSourceUrl,
             duration = duration,

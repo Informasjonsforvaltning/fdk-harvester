@@ -763,6 +763,62 @@ class HarvesterHappyPathTest {
         }
     }
 
+    @Test
+    fun `dataset harvester - updates unchanged datasets only when their fdk id is forced`() {
+        val ttl =
+            """
+            @prefix dcat: <http://www.w3.org/ns/dcat#> .
+            @prefix dct: <http://purl.org/dc/terms/> .
+            <http://example.org/catalog> a dcat:Catalog ;
+              dcat:dataset <http://example.org/dataset1> , <http://example.org/dataset2> .
+            <http://example.org/dataset1> a dcat:Dataset ; dct:title "Dataset 1" .
+            <http://example.org/dataset2> a dcat:Dataset ; dct:title "Dataset 2" .
+            """.trimIndent()
+
+        val server = wireMock(ttl)
+        try {
+            val stored = mutableMapOf<String, ResourceEntity>()
+            val resourceRepository = mockk<ResourceRepository>()
+            every { resourceRepository.findById(any<String>()) } answers { Optional.ofNullable(stored[firstArg()]) }
+            every { resourceRepository.findAllByType(any()) } answers { stored.values.filter { it.type == firstArg() } }
+            every { resourceRepository.save(any<ResourceEntity>()) } answers {
+                firstArg<ResourceEntity>().also { stored[it.uri] = it }
+            }
+            every { resourceRepository.saveAll(any<Iterable<ResourceEntity>>()) } answers {
+                firstArg<Iterable<ResourceEntity>>().onEach { stored[it.uri] = it }.toList()
+            }
+
+            val harvestSourceEntity =
+                HarvestSourceEntity(id = 1L, uri = "http://localhost:${server.port()}/rdf", checksum = "c", issued = Instant.now())
+            val harvestSourceRepository = mockk<HarvestSourceRepository>()
+            every { harvestSourceRepository.findByUri(any()) } returns harvestSourceEntity
+
+            val producer = mockk<ResourceEventProducer>(relaxed = true)
+            val appProps = ApplicationProperties(datasetUri = "https://datasets.fellesdatakatalog.digdir.no/datasets")
+            val harvester = DatasetHarvester(appProps, mockk(relaxed = true), resourceRepository, harvestSourceRepository, producer)
+            val source =
+                HarvestDataSource(id = "source-1", url = "http://localhost:${server.port()}/rdf", acceptHeaderValue = "text/turtle")
+
+            harvester.harvestDatasetCatalog(source, Calendar.getInstance(), forceUpdate = false, runId = "run-1")
+            val forcedFdkId = stored.getValue("http://example.org/dataset2").fdkId
+
+            val unforcedReport = harvester.harvestDatasetCatalog(source, Calendar.getInstance(), forceUpdate = false, runId = "run-2")
+            val forcedReport =
+                harvester.harvestDatasetCatalog(
+                    source.copy(forcedFdkIds = setOf(forcedFdkId)),
+                    Calendar.getInstance(),
+                    forceUpdate = false,
+                    runId = "run-3",
+                )
+
+            assertTrue(unforcedReport!!.changedResources.isEmpty())
+            assertEquals(listOf("http://example.org/dataset2"), forcedReport!!.changedResources.map { it.uri })
+            assertTrue(forcedReport.changedCatalogs.isEmpty())
+        } finally {
+            server.stop()
+        }
+    }
+
     private fun wireMock(turtle: String): WireMockServer {
         val server = WireMockServer(wireMockConfig().dynamicPort())
         server.start()

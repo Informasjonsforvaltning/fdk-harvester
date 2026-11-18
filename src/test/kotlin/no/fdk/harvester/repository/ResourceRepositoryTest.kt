@@ -125,6 +125,28 @@ class ResourceRepositoryTest {
         assertTrue(found.all { it.fdkId == "fdk-123" })
     }
 
+    @Test
+    fun `findSourcesByFdkIds returns source url for member resources that are not removed`() {
+        val sourceA = createHarvestSource("http://example.org/source-a")
+        val sourceB = createHarvestSource("http://example.org/source-b")
+        entityManager.persist(sourceA)
+        entityManager.persist(sourceB)
+        entityManager.persist(createResource("http://example.org/a1", ResourceType.DATASET, sourceA, fdkId = "a1"))
+        entityManager.persist(createResource("http://example.org/b1", ResourceType.DATASET, sourceB, fdkId = "b1"))
+        entityManager.persist(createResource("http://example.org/b2", ResourceType.DATASET, sourceB, fdkId = "b2", removed = true))
+        entityManager.persist(createResource("http://example.org/c1", ResourceType.DATASET, sourceB, fdkId = "c1"))
+        entityManager.persist(createResource("http://example.org/catalog", ResourceType.CATALOG, sourceB, fdkId = "catalog"))
+        entityManager.flush()
+
+        val result = resourceRepository.findSourcesByFdkIds(listOf("a1", "b1", "b2", "catalog", "unknown"))
+
+        assertEquals(
+            setOf("a1" to "http://example.org/source-a", "b1" to "http://example.org/source-b"),
+            result.map { it.fdkId to it.sourceUrl }.toSet(),
+        )
+        assertTrue(result.all { it.type == ResourceType.DATASET })
+    }
+
     private fun createHarvestSource(uri: String): HarvestSourceEntity = HarvestSourceEntity(
         uri = uri,
         checksum = "checksum-123",

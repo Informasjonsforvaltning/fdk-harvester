@@ -14,6 +14,7 @@ data class HarvestDataSource(
     val acceptHeaderValue: String? = null,
     val publisherId: String? = null,
     val authHeader: AuthHeader? = null,
+    val forcedFdkIds: Set<String> = emptySet(),
 )
 
 /** Optional HTTP auth header (type and value) for harvesting protected sources. */

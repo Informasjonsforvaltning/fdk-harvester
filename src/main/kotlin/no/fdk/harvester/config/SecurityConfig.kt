@@ -16,7 +16,7 @@ open class SecurityConfig {
     @Bean
     open fun securityFilterChain(http: HttpSecurity): SecurityFilterChain {
         http
-            .csrf { it.ignoringRequestMatchers("/actuator/**") }
+            .csrf { it.disable() }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests { authz ->
                 authz
