@@ -27,6 +27,7 @@ import java.net.http.HttpResponse
         "spring.kafka.listener.auto-startup=false",
         "spring.kafka.bootstrap-servers=localhost:9092",
         "spring.kafka.consumer.properties.schema.registry.url=http://localhost:8081",
+        "app.security.api-key=test-key",
     ],
 )
 class SourceLookupControllerIntegrationTest {
@@ -34,17 +35,30 @@ class SourceLookupControllerIntegrationTest {
     private var port: Int = 0
 
     @Test
-    fun `lookup accepts post without csrf token`() {
-        val request =
+    fun `lookup accepts post with api key and without csrf token`() {
+        val response = lookup(apiKey = "test-key")
+
+        assertEquals(200, response.statusCode())
+        assertTrue(response.body().contains("\"notFound\":[\"unknown\"]"))
+    }
+
+    @Test
+    fun `lookup rejects request without api key`() {
+        assertEquals(401, lookup(apiKey = null).statusCode())
+    }
+
+    @Test
+    fun `lookup rejects request with wrong api key`() {
+        assertEquals(401, lookup(apiKey = "wrong-key").statusCode())
+    }
+
+    private fun lookup(apiKey: String?): HttpResponse<String> {
+        val builder =
             HttpRequest
                 .newBuilder(URI("http://localhost:$port/sources/lookup"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString("""{"fdkIds":["unknown"]}"""))
-                .build()
-
-        val response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString())
-
-        assertEquals(200, response.statusCode())
-        assertTrue(response.body().contains("\"notFound\":[\"unknown\"]"))
+        apiKey?.let { builder.header("X-API-KEY", it) }
+        return HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString())
     }
 }

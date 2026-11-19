@@ -147,6 +147,25 @@ class ResourceRepositoryTest {
         assertTrue(result.all { it.type == ResourceType.DATASET })
     }
 
+    @Test
+    fun `findSourcesByFdkIds returns each resource type from the same source`() {
+        val source = createHarvestSource("http://example.org/source")
+        entityManager.persist(source)
+        entityManager.persist(createResource("http://example.org/dataset", ResourceType.DATASET, source, fdkId = "dataset"))
+        entityManager.persist(createResource("http://example.org/dataservice", ResourceType.DATASERVICE, source, fdkId = "dataservice"))
+        entityManager.flush()
+
+        val result = resourceRepository.findSourcesByFdkIds(listOf("dataset", "dataservice"))
+
+        assertEquals(
+            setOf(
+                Triple("dataset", ResourceType.DATASET, "http://example.org/source"),
+                Triple("dataservice", ResourceType.DATASERVICE, "http://example.org/source"),
+            ),
+            result.map { Triple(it.fdkId, it.type, it.sourceUrl) }.toSet(),
+        )
+    }
+
     private fun createHarvestSource(uri: String): HarvestSourceEntity = HarvestSourceEntity(
         uri = uri,
         checksum = "checksum-123",

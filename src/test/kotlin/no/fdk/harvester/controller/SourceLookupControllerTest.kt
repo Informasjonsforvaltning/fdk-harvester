@@ -49,9 +49,47 @@ class SourceLookupControllerTest {
         verify(exactly = 0) { resourceRepository.findSourcesByFdkIds(any()) }
     }
 
-    private fun source(fdkId: String, sourceUrl: String): ResourceSource = object : ResourceSource {
-        override val fdkId = fdkId
-        override val type = ResourceType.DATASET
-        override val sourceUrl = sourceUrl
+    @Test
+    fun `rejects more than 1000 ids`() {
+        val response = controller.lookupSources(SourceLookupRequest((1..1001).map { "id-$it" }))
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.statusCode)
+        verify(exactly = 0) { resourceRepository.findSourcesByFdkIds(any()) }
     }
+
+    @Test
+    fun `accepts 1000 ids`() {
+        every { resourceRepository.findSourcesByFdkIds(any()) } returns emptyList()
+
+        val response = controller.lookupSources(SourceLookupRequest((1..1000).map { "id-$it" }))
+
+        assertEquals(HttpStatus.OK, response.statusCode)
+    }
+
+    @Test
+    fun `splits ids from same source by resource type`() {
+        every { resourceRepository.findSourcesByFdkIds(any()) } returns
+            listOf(
+                source("dataset", "http://example.org/a"),
+                source("dataservice", "http://example.org/a", ResourceType.DATASERVICE),
+            )
+
+        val response = controller.lookupSources(SourceLookupRequest(listOf("dataset", "dataservice")))
+
+        assertEquals(
+            setOf(
+                SourceWithFdkIds("http://example.org/a", ResourceType.DATASET, listOf("dataset")),
+                SourceWithFdkIds("http://example.org/a", ResourceType.DATASERVICE, listOf("dataservice")),
+            ),
+            response.body!!.sources.toSet(),
+        )
+        assertEquals(emptyList<String>(), response.body!!.notFound)
+    }
+
+    private fun source(fdkId: String, sourceUrl: String, type: ResourceType = ResourceType.DATASET): ResourceSource =
+        object : ResourceSource {
+            override val fdkId = fdkId
+            override val type = type
+            override val sourceUrl = sourceUrl
+        }
 }
