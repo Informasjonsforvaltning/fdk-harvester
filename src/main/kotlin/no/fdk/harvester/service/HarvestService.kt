@@ -55,6 +55,7 @@ open class HarvestService(
         acceptHeader: String,
         runId: String,
         forced: Boolean,
+        forcedFdkIds: Set<String>,
     ): no.fdk.harvester.model.HarvestReport? {
         val existingSource = harvestSourceRepository.findByUri(dataSourceUrl)
         val forceBecauseNotInitialized = existingSource == null || !existingSource.initialized
@@ -71,6 +72,7 @@ open class HarvestService(
                     url = dataSourceUrl,
                     acceptHeaderValue = acceptHeader,
                     dataType = dataType.name.lowercase(),
+                    forcedFdkIds = forcedFdkIds,
                 )
 
             val harvestDate = Calendar.getInstance()

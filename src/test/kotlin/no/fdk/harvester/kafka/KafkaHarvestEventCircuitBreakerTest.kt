@@ -58,6 +58,46 @@ class KafkaHarvestEventCircuitBreakerTest {
     }
 
     @Test
+    fun `process passes forced fdk ids to harvest service`() {
+        val event = createHarvestEvent(DataType.dataset, "source-1", "http://example.org/source", forcedFdkIds = listOf("fdk-1", "fdk-2"))
+        val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
+        val report = createSuccessReport("dataset", "source-1", "http://example.org/source")
+
+        every { harvestService.executeHarvest(any(), any(), any(), any(), any(), any(), any()) } returns report
+
+        circuitBreaker.process(record)
+
+        verify {
+            harvestService.executeHarvest(
+                dataSourceId = "source-1",
+                dataSourceUrl = "http://example.org/source",
+                dataType = DataType.dataset,
+                acceptHeader = "text/turtle",
+                runId = "run-123",
+                forced = false,
+                forcedFdkIds = setOf("fdk-1", "fdk-2"),
+            )
+        }
+        assertEquals(
+            1.0,
+            meterRegistry
+                .counter(
+                    "harvest_count",
+                    "status",
+                    "success",
+                    "type",
+                    "dataset",
+                    "force_update",
+                    "true",
+                    "datasource_id",
+                    "source-1",
+                    "datasource_url",
+                    "http://example.org/source",
+                ).count(),
+        )
+    }
+
+    @Test
     fun `process delegates to harvest service for concept`() {
         val event = createHarvestEvent(DataType.concept, "source-1", "http://example.org/source")
         val record = ConsumerRecord("harvest-events", 0, 0L, "key", event)
@@ -542,6 +582,7 @@ class KafkaHarvestEventCircuitBreakerTest {
         runId: String = "run-123",
         forced: Boolean = false,
         removeAll: Boolean = false,
+        forcedFdkIds: List<String>? = null,
     ): HarvestEvent = HarvestEvent
         .newBuilder()
         .setPhase(HarvestPhase.INITIATING)
@@ -552,6 +593,7 @@ class KafkaHarvestEventCircuitBreakerTest {
         .setAcceptHeader("text/turtle")
         .setForced(forced)
         .setRemoveAll(removeAll)
+        .setForcedFdkIds(forcedFdkIds?.map { it as CharSequence })
         .build()
 
     private fun createRemovingEvent(

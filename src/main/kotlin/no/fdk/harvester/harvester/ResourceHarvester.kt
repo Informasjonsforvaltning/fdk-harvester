@@ -107,6 +107,7 @@ abstract class ResourceHarvester(
                 forceUpdate,
                 harvestSource,
                 memberToContainerFdkUri,
+                source.forcedFdkIds,
             )
 
         val removedMembers =
@@ -229,6 +230,7 @@ abstract class ResourceHarvester(
         forceUpdate: Boolean,
         harvestSource: HarvestSourceEntity,
         memberToContainerFdkUri: Map<String, String>,
+        forcedFdkIds: Set<String>,
     ): UpdatedMembersResult {
         val resourceGraphs = mutableMapOf<String, String>()
         val metaRecordModels = mutableMapOf<String, Model>()
@@ -242,7 +244,7 @@ abstract class ResourceHarvester(
                         type = harvestConfig.resourceType,
                         harvestedChecksum = computeChecksum(member.harvested),
                         harvestDate = harvestDate,
-                        forceUpdate = forceUpdate,
+                        forceUpdate = forceUpdate || dbMeta?.fdkId in forcedFdkIds,
                         harvestSource = harvestSource,
                         dbMeta = dbMeta,
                     )?.let { meta ->
@@ -278,11 +280,20 @@ abstract class ResourceHarvester(
                 }
             }
 
+        logMissingForcedFdkIds(forcedFdkIds, updatedMembers, harvestSource)
+
         return UpdatedMembersResult(
             updatedMembers = updatedMembers,
             resourceGraphs = resourceGraphs,
             metaRecordModels = metaRecordModels,
         )
+    }
+
+    private fun logMissingForcedFdkIds(forcedFdkIds: Set<String>, updatedMembers: List<FdkIdAndUri>, harvestSource: HarvestSourceEntity) {
+        val missing = forcedFdkIds - updatedMembers.map { it.fdkId }.toSet()
+        if (missing.isNotEmpty()) {
+            logger.warn("Forced fdkIds not found in {}: {}", harvestSource.uri, missing.sorted())
+        }
     }
 
     /**

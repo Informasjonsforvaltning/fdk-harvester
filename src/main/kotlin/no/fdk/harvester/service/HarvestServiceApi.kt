@@ -16,6 +16,7 @@ interface HarvestServiceApi {
         acceptHeader: String,
         runId: String,
         forced: Boolean,
+        forcedFdkIds: Set<String> = emptySet(),
     ): no.fdk.harvester.model.HarvestReport?
 
     fun markResourcesAsDeleted(

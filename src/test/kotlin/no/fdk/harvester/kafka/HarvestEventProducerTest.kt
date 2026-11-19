@@ -50,6 +50,28 @@ class HarvestEventProducerTest {
     }
 
     @Test
+    fun `produceHarvestingEvent does not copy forced fdk ids`() {
+        val producer = HarvestEventProducer(kafkaTemplate, "harvest-events")
+
+        val initiating =
+            HarvestEvent
+                .newBuilder()
+                .setPhase(HarvestPhase.INITIATING)
+                .setRunId("run-1")
+                .setDataType(DataType.dataset)
+                .setForcedFdkIds(listOf<CharSequence>("fdk-1"))
+                .build()
+
+        every { kafkaTemplate.send(any<String>(), any<String>(), any()) } returns CompletableFuture.completedFuture(mockk())
+
+        producer.produceHarvestingEvent(initiating, report = null)
+
+        val eventSlot = slot<HarvestEvent>()
+        verify { kafkaTemplate.send(any<String>(), any<String>(), capture(eventSlot)) }
+        assertEquals(null, eventSlot.captured.forcedFdkIds)
+    }
+
+    @Test
     fun `produceHarvestingEvent returns null when runId is null`() {
         val producer = HarvestEventProducer(kafkaTemplate, "harvest-events")
 

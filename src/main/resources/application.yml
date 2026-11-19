@@ -47,6 +47,8 @@ application:
   conceptUri: ${APPLICATION_CONCEPT_URI:https://concepts.fellesdatakatalog.digdir.no/concepts}
 
 app:
+  security:
+    api-key: ${API_KEY:}
   kafka:
     consumer:
       max-poll-records: ${APP_KAFKA_CONSUMER_MAX_POLL_RECORDS:1}
