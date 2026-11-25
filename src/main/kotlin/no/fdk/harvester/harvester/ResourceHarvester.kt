@@ -364,22 +364,23 @@ abstract class ResourceHarvester(
         val catalogModelWithoutMembers =
             createModelForGeneratedContainer(
                 containerURI = generatedContainerURI,
-                memberUris = memberUris,
                 organization = organization,
             )
 
         val catalogModel = ModelFactory.createDefaultModel()
+        catalogModel.add(catalogModelWithoutMembers)
+        catalogModel.getResource(generatedContainerURI).addMembersToContainer(memberUris)
         orphanMembers.forEach { catalogModel.add(it.harvested) }
 
         return ContainerRDFModel(
             resourceURI = generatedContainerURI,
             harvestedWithoutMembers = catalogModelWithoutMembers,
-            harvested = catalogModel.union(catalogModelWithoutMembers),
+            harvested = catalogModel,
             memberURIs = memberUris,
         )
     }
 
-    protected fun createModelForGeneratedContainer(containerURI: String, memberUris: Set<String>, organization: Organization?): Model {
+    protected fun createModelForGeneratedContainer(containerURI: String, organization: Organization?): Model {
         val catalogModel = ModelFactory.createDefaultModel()
         catalogModel
             .createResource(containerURI)
@@ -389,7 +390,7 @@ abstract class ResourceHarvester(
                 organization,
                 harvestConfig.generatedCatalogNbLabel,
                 harvestConfig.generatedCatalogEnLabel,
-            ).addMembersToContainer(memberUris)
+            )
         return catalogModel
     }
 
