@@ -13,14 +13,25 @@ import no.fdk.harvest.DataType
 import no.fdk.harvester.adapter.DefaultOrganizationsAdapter
 import no.fdk.harvester.config.ApplicationProperties
 import no.fdk.harvester.kafka.ResourceEventProducer
+import no.fdk.harvester.model.FdkIdAndUri
 import no.fdk.harvester.model.HarvestDataSource
 import no.fdk.harvester.model.HarvestSourceEntity
 import no.fdk.harvester.model.Organization
 import no.fdk.harvester.model.PrefLabel
 import no.fdk.harvester.model.ResourceEntity
 import no.fdk.harvester.model.ResourceType
+import no.fdk.harvester.rdf.DCATNO
+import no.fdk.harvester.rdf.parseRDF
 import no.fdk.harvester.repository.HarvestSourceRepository
 import no.fdk.harvester.repository.ResourceRepository
+import org.apache.jena.rdf.model.Model
+import org.apache.jena.rdf.model.Property
+import org.apache.jena.rdf.model.RDFNode
+import org.apache.jena.riot.Lang
+import org.apache.jena.vocabulary.DCAT
+import org.apache.jena.vocabulary.DCTerms
+import org.apache.jena.vocabulary.RDF
+import org.apache.jena.vocabulary.RDFS
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -640,6 +651,115 @@ class HarvesterHappyPathTest {
     }
 
     @Test
+    fun `service harvester - catalog graph of service in generated catalog only links that service`() {
+        val ttl =
+            """
+            @prefix cpsvno: <https://data.norge.no/vocabulary/cpsvno#> .
+            @prefix dct: <http://purl.org/dc/terms/> .
+            <http://example.org/service1> a cpsvno:Service ; dct:title "S1" .
+            <http://example.org/service2> a cpsvno:Service ; dct:title "S2" .
+            <http://example.org/service3> a cpsvno:Service ; dct:title "S3" .
+            """.trimIndent()
+
+        val catalogGraphs = harvestServicesAndCaptureCatalogGraphs(ttl)
+
+        assertEquals(
+            setOf("http://example.org/service1", "http://example.org/service2", "http://example.org/service3"),
+            catalogGraphs.keys,
+        )
+        catalogGraphs.forEach { (serviceUri, model) ->
+            assertEquals(
+                listOf(serviceUri),
+                model.memberLinks(DCATNO.containsService),
+                "catalog graph for $serviceUri should only link itself",
+            )
+            val catalog = model.listSubjectsWithProperty(DCATNO.containsService).toList().single()
+            assertTrue(catalog.uri.endsWith("#GeneratedCatalog"))
+            assertTrue(
+                catalog.hasProperty(RDF.type, DCAT.Catalog) &&
+                    catalog.hasProperty(RDFS.label, model.createLiteral("NB - Tjenestekatalog", "nb")) &&
+                    catalog.hasProperty(DCTerms.publisher, model.createResource("http://example.org/org")),
+                "catalog graph for $serviceUri should still describe the generated catalog",
+            )
+        }
+    }
+
+    @Test
+    fun `service harvester - catalog graph of service in source catalog only links that service`() {
+        val ttl =
+            """
+            @prefix dcat: <http://www.w3.org/ns/dcat#> .
+            @prefix dcatno: <https://data.norge.no/vocabulary/dcatno#> .
+            @prefix cpsvno: <https://data.norge.no/vocabulary/cpsvno#> .
+            @prefix dct: <http://purl.org/dc/terms/> .
+            <http://example.org/catalog> a dcat:Catalog ;
+              dct:title "Catalog" ;
+              dcatno:containsService <http://example.org/service1>, <http://example.org/service2> .
+            <http://example.org/service1> a cpsvno:Service ; dct:title "S1" .
+            <http://example.org/service2> a cpsvno:Service ; dct:title "S2" .
+            """.trimIndent()
+
+        val catalogGraphs = harvestServicesAndCaptureCatalogGraphs(ttl)
+
+        assertEquals(setOf("http://example.org/service1", "http://example.org/service2"), catalogGraphs.keys)
+        catalogGraphs.forEach { (serviceUri, model) ->
+            assertEquals(
+                listOf(serviceUri),
+                model.memberLinks(DCATNO.containsService),
+                "catalog graph for $serviceUri should only link itself",
+            )
+            assertTrue(model.getResource("http://example.org/catalog").hasProperty(DCTerms.title, "Catalog"))
+        }
+    }
+
+    @Test
+    fun `dataset harvester - catalog graph of dataset in generated catalog only links that dataset`() {
+        val ttl =
+            """
+            @prefix dcat: <http://www.w3.org/ns/dcat#> .
+            @prefix dct: <http://purl.org/dc/terms/> .
+            <http://example.org/dataset1> a dcat:Dataset ; dct:title "D1" .
+            <http://example.org/dataset2> a dcat:Dataset ; dct:title "D2" .
+            """.trimIndent()
+
+        val server = wireMock(ttl)
+        try {
+            val producer = mockk<ResourceEventProducer>(relaxed = true)
+            val harvester =
+                DatasetHarvester(
+                    ApplicationProperties(datasetUri = "https://datasets.fellesdatakatalog.digdir.no/datasets"),
+                    mockk(relaxed = true),
+                    mockResourceRepository(),
+                    mockHarvestSourceRepository(),
+                    producer,
+                )
+            harvester.harvestDatasetCatalog(
+                source =
+                HarvestDataSource(
+                    id = "source-1",
+                    url = "http://localhost:${server.port()}/rdf",
+                    acceptHeaderValue = "text/turtle",
+                ),
+                harvestDate = Calendar.getInstance(),
+                forceUpdate = false,
+                runId = "run-1",
+            )
+
+            val catalogGraphs = captureCatalogGraphsByUri(producer, DataType.dataset)
+            assertEquals(setOf("http://example.org/dataset1", "http://example.org/dataset2"), catalogGraphs.keys)
+            catalogGraphs.forEach { (datasetUri, model) ->
+                assertEquals(
+                    listOf(datasetUri),
+                    model.memberLinks(DCAT.dataset),
+                    "catalog graph for $datasetUri should only link itself",
+                )
+            }
+        } finally {
+            server.stop()
+        }
+    }
+
+    @Test
     fun `event harvester - harvestEvents happy path`() {
         val ttl =
             """
@@ -871,6 +991,66 @@ class HarvesterHappyPathTest {
             server.stop()
         }
     }
+
+    private fun harvestServicesAndCaptureCatalogGraphs(turtle: String): Map<String, Model> {
+        val server = wireMock(turtle)
+        try {
+            val producer = mockk<ResourceEventProducer>(relaxed = true)
+            val orgAdapter = mockk<DefaultOrganizationsAdapter>()
+            every { orgAdapter.getOrganization("123") } returns
+                Organization(
+                    organizationId = "123",
+                    uri = "http://example.org/org",
+                    name = "Org",
+                    prefLabel = PrefLabel(nb = "NB", nn = "NN", en = "EN"),
+                )
+            val harvester =
+                ServiceHarvester(
+                    ApplicationProperties(serviceUri = "https://services.fellesdatakatalog.digdir.no/services"),
+                    orgAdapter,
+                    mockResourceRepository(),
+                    mockHarvestSourceRepository(),
+                    producer,
+                )
+            harvester.harvestServices(
+                source =
+                HarvestDataSource(
+                    id = "source-1",
+                    url = "http://localhost:${server.port()}/rdf",
+                    acceptHeaderValue = "text/turtle",
+                    publisherId = "123",
+                ),
+                harvestDate = Calendar.getInstance(),
+                forceUpdate = false,
+                runId = "run-1",
+            )
+            return captureCatalogGraphsByUri(producer, DataType.service)
+        } finally {
+            server.stop()
+        }
+    }
+
+    private fun captureCatalogGraphsByUri(producer: ResourceEventProducer, dataType: DataType): Map<String, Model> {
+        val resourcesSlot = slot<List<FdkIdAndUri>>()
+        val catalogGraphsSlot = slot<Map<String, String>>()
+        verify(exactly = 1) {
+            producer.publishHarvestedEvents(
+                dataType = dataType,
+                resources = capture(resourcesSlot),
+                resourceGraphs = any(),
+                runId = any(),
+                catalogGraphs = capture(catalogGraphsSlot),
+            )
+        }
+        return resourcesSlot.captured.associate { resource ->
+            resource.uri to parseRDF(catalogGraphsSlot.captured.getValue(resource.fdkId), Lang.TURTLE)
+        }
+    }
+
+    private fun Model.memberLinks(property: Property): List<String> = listStatements(null, property, null as RDFNode?)
+        .toList()
+        .map { it.resource.uri }
+        .sorted()
 
     private fun wireMock(turtle: String): WireMockServer {
         val server = WireMockServer(wireMockConfig().dynamicPort())
